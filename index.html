@@ -374,61 +374,19 @@ function autoAccentFromImage(img){
 function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm=h>=12?'PM':'AM'; h=h%12||12; return {h,m,ampm}; }
 function startClock(){ const tick=()=>{const d=new Date();const{h,m,ampm}=fmtTime(d);el.clock.textContent=`${h}:${m}`;el.ampm.textContent=ampm;}; tick(); setInterval(tick,15000); }
 
-// --- [NEW] Keep screen awake (Wake Lock API with robust fallback) ---
+
+// --- Keep screen awake (robust: Wake Lock + iOS PWA fallback) ---
 let wakeLock = null;
-
-async function acquireWakeLock(reason = '') {
-  try {
-    if (!('wakeLock' in navigator)) return;                   // unsupported browser
-    if (document.visibilityState !== 'visible') return;       // only while visible
-    if (wakeLock) return;                                     // already held
-
-    wakeLock = await navigator.wakeLock.request('screen');
-    console.log('[wakeLock] acquired', reason);
-
-    // If the system drops the lock (e.g., Low Power Mode), listen for it
-    wakeLock.addEventListener('release', () => {
-      console.log('[wakeLock] released by system');
-      wakeLock = null;
-      // Proactively enable the video fallback if the lock is lost while visible
-      if (document.visibilityState === 'visible') {
-        enableNoSleep('wakelock-release');
-      }
-    });
-
-  } catch (err) {
-    console.warn('[wakeLock] failed:', err.name, err.message);
-  }
-}
-
-function setupWakeLock() {
-  // A user gesture is required to request a wake lock for the first time
-  const firstGesture = () => {
-    acquireWakeLock('first-gesture');
-    window.removeEventListener('pointerdown', firstGesture, true);
-    window.removeEventListener('click', firstGesture, true);
-  };
-  window.addEventListener('pointerdown', firstGesture, true);
-  window.addEventListener('click', firstGesture, true);
-
-  // Re-acquire the lock when the page becomes visible again
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      acquireWakeLock('visibilitychange');
-    }
-  });
-}
-
-// Release the lock when the page is hidden
-window.addEventListener('pagehide', () => {
-  try { wakeLock?.release(); } catch {}
-});
-
-
-// --- [NEW] Fallback "NoSleep" video method for older iOS / stubborn PWAs ---
 let noSleep = null;
 
-// Dynamically load the NoSleep.js library only when needed
+// Environment helpers
+const IS_IOS = /iP(hone|od|ad)/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS on M1
+const IS_STANDALONE = () =>
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+  || window.navigator.standalone === true;
+
+// Dynamically load NoSleep only when needed
 function ensureNoSleepLoaded() {
   return new Promise((resolve, reject) => {
     if (window.NoSleep) return resolve();
@@ -440,50 +398,92 @@ function ensureNoSleepLoaded() {
     document.head.appendChild(s);
   });
 }
-
-async function enableNoSleep(reason='') {
+async function enableNoSleep(reason = '') {
   try {
     await ensureNoSleepLoaded();
     noSleep = noSleep || new NoSleep();
     if (!noSleep.isEnabled) {
       await noSleep.enable();
-      console.log('[noSleep] fallback enabled', reason);
+      console.log('[noSleep] enabled', reason);
     }
   } catch (e) {
-    console.warn('[noSleep] fallback failed', e);
+    console.warn('[noSleep] enable failed', e);
   }
 }
 function disableNoSleep() {
   try { noSleep?.disable(); } catch {}
 }
 
-// --- [NEW] Main function to orchestrate keeping the screen awake ---
-function setupStayAwake() {
-  // Use the modern API if available
-  if ('wakeLock' in navigator) {
-    setupWakeLock();
-  }
+// Wake Lock with proper fallbacks
+async function acquireWakeLock(reason = '') {
+  try {
+    if (!('wakeLock' in navigator)) throw new Error('no-wakelock-api');
+    if (document.visibilityState !== 'visible') return;
+    if (wakeLock) return;
 
-  // Set up the fallback for browsers without Wake Lock, or as a backup
-  const firstGesture = async () => {
-    // If Wake Lock API is missing, immediately enable the fallback
-    if (!('wakeLock' in navigator)) {
-      await enableNoSleep('no-wakelock-api');
+    wakeLock = await navigator.wakeLock.request('screen');
+    console.log('[wakeLock] acquired', reason);
+
+    wakeLock.addEventListener('release', () => {
+      console.log('[wakeLock] released by system');
+      wakeLock = null;
+      // If we’re in iOS standalone (historically buggy), keep the fallback on
+      if (IS_IOS && IS_STANDALONE()) {
+        enableNoSleep('wakelock-release');
+      }
+    });
+  } catch (err) {
+    console.warn('[wakeLock] request failed:', err?.name || err, err?.message || '');
+    // IMPORTANT: enable the fallback if wake lock can’t be acquired
+    if (IS_IOS && IS_STANDALONE()) {
+      await enableNoSleep('wakelock-request-failed');
     }
+  }
+}
+
+function setupStayAwake() {
+  // iOS requires a user gesture; also, PWA bug means we always light up fallback in standalone
+  const firstGesture = async () => {
+    if (IS_IOS && IS_STANDALONE()) {
+      await enableNoSleep('ios-standalone-first-gesture');
+    }
+    await acquireWakeLock('first-gesture');
+
     window.removeEventListener('pointerdown', firstGesture, true);
     window.removeEventListener('click', firstGesture, true);
+    window.removeEventListener('touchend', firstGesture, true);
   };
   window.addEventListener('pointerdown', firstGesture, true);
   window.addEventListener('click', firstGesture, true);
+  window.addEventListener('touchend', firstGesture, true);
 
-  // Manage the fallback when the app visibility changes
+  // Re-acquire on visibility and page lifecycle changes
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') {
+    if (document.visibilityState === 'visible') {
+      await acquireWakeLock('visibilitychange');
+      if ((IS_IOS && IS_STANDALONE()) && !wakeLock) {
+        await enableNoSleep('visible-no-wakelock');
+      }
+    } else {
+      // When hidden, stop the fallback video
       disableNoSleep();
     }
   });
-  window.addEventListener('pagehide', disableNoSleep);
+
+  window.addEventListener('pageshow', () => acquireWakeLock('pageshow'));
+  window.addEventListener('pagehide', () => {
+    try { wakeLock?.release(); } catch {}
+    disableNoSleep();
+  });
+
+  // Gentle nudge: some iOS builds occasionally pause the fallback; re-enable periodically
+  setInterval(() => {
+    if ((IS_IOS && IS_STANDALONE()) && noSleep && !noSleep.isEnabled) {
+      enableNoSleep('periodic-nudge');
+    }
+  }, 60000);
 }
+// --- end stay-awake block ---
 
   
 /* Exclude removed cards from selection */
