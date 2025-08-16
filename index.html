@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale-1" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Art Nightstand Slideshow</title>
 <style>
   :root{
@@ -17,10 +17,8 @@
     --shadow:0 10px 30px rgba(0,0,0,.35);
     --radius:18px;
     --step-fade:450ms;
-
-    /* Readability tweaks */
-    --accent-text: color-mix(in srgb, var(--accent) 70%, white 30%); /* lighter than accent */
-    --title-fg:    color-mix(in srgb, var(--fg) 85%, var(--muted) 15%); /* soften white a bit */
+    --accent-text: color-mix(in srgb, var(--accent) 70%, white 30%);
+    --title-fg:    color-mix(in srgb, var(--fg) 85%, var(--muted) 15%);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -31,14 +29,14 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* VISUAL FIX: This is now the solid black background for the whole page */
+  /* Black background for the entire page, visible outside the frame */
   .backdrop{
     position:fixed; inset:0; z-index:0;
     background:var(--bg);
     pointer-events:none;
   }
 
-  /* Stage centers a 16:9 frame; backdrop shows around it */
+  /* Stage centers the frame */
   .stage{
     position:relative; z-index:1; display:grid; place-items:center;
     width:100%; height:100vh; padding:1rem;
@@ -49,26 +47,27 @@
     box-shadow:var(--shadow);
     display:grid; grid-template-columns:34% 66%;
     user-select:none;
-    /* This will be the hook for the JS to set the background image */
-    background-image: inherit;
   }
 
-  /* VISUAL FIX: The blurred artwork is now the background of the frame itself,
-     using a pseudo-element so it doesn't blur the content (text/image) */
-  .frame::before {
-    content: '';
+  /* This new element creates the blurry background INSIDE the frame,
+     sitting behind the text and the artwork for a unified look. */
+  .frame-backdrop {
     position: absolute;
     inset: 0;
-    z-index: -1; /* Sits behind the grid content */
-    background-image: inherit; /* Takes the image from the parent .frame */
+    z-index: 0; /* Sits behind the grid content */
     background-position: center;
     background-size: cover;
     filter: blur(40px) brightness(.35) saturate(.9);
     transform: scale(1.12);
-    border-radius: inherit; /* Important for respecting the parent's rounded corners */
+    border-radius: inherit;
   }
 
-  /* Left column: clock + meta */
+  /* Grid content now sits on top of the blurry backdrop */
+  .side, .art, .hits, .footer {
+    position: relative;
+    z-index: 1;
+  }
+
   .side{
     display:flex; flex-direction:column; justify-content:flex-start;
     padding:1.2rem; gap:1rem;
@@ -93,16 +92,13 @@
   .reveal:nth-child(3){ animation-delay:120ms }
   @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
 
-  /* Right column: artwork */
-  .art{ position:relative; width:100%; height:100%; display:grid; place-items:center; grid-column:2; }
+  .art{ width:100%; height:100%; display:grid; place-items:center; grid-column:2; }
   .art img{ max-width:100%; max-height:100%; object-fit:contain; filter: drop-shadow(0 20px 40px rgba(0,0,0,.35)); -webkit-touch-callout: default; }
   .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
 
-  /* Exact 50/50 hit areas across the whole frame */
-  .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index:3; }
+  .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; }
   .hit{ cursor:pointer; }
 
-  /* Footer: left cluster (grade + settings), progress chip on right */
   .footer{
     position:absolute; left:0; right:0; bottom:0;
     display:flex; justify-content:space-between; align-items:center; gap:.6rem;
@@ -110,8 +106,7 @@
   }
   .leftGroup{ display:flex; gap:.6rem; align-items:center; }
   .btn{
-    background:var(--btn); color:var(--fg);
-    border:1px solid rgba(255,255,255,.08);
+    background:var(--btn); color:var(--fg); border:1px solid rgba(255,255,255,.08);
     padding:.8rem 1.1rem; border-radius:14px; cursor:pointer; user-select:none;
     transition: transform .06s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
     overflow:hidden;
@@ -121,28 +116,25 @@
   .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
   .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; outline:none; filter:none; }
 
-  .mark{ display:none; }
   .chip{ position:absolute; top:.6rem; right:.6rem; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:.25rem .6rem; color:var(--muted); font-size:.9rem; z-index:6; }
 
-  /* Settings modal */
   dialog{ border:none; border-radius:16px; background:var(--surface); color:var(--fg); width:min(900px, 95vw); box-shadow: var(--shadow); }
   dialog::backdrop{ background:rgba(0,0,0,.6); backdrop-filter: blur(3px); }
   .modal{ padding:1rem; display:grid; gap:1rem; }
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
   .grid3{ display:grid; grid-template-columns:repeat(4, 1fr); gap:.8rem; }
   .field label{ display:block; font-size:.9rem; color:var(--muted); margin-bottom:.25rem; }
-  .field input[type="number"], .field input[type="text"], .field select{
-    width:100%; background:#0f0f15; border:1px solid rgba(255,255,255,.1); color:var(--fg); padding:.55rem .6rem; border-radius:10px;
-  }
+  .field input, .field select{ width:100%; background:#0f0f15; border:1px solid rgba(255,255,255,.1); color:var(--fg); padding:.55rem .6rem; border-radius:10px; }
   .list{ max-height:45vh; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
   .row{ display:grid; grid-template-columns:auto 1fr auto; gap:.6rem; align-items:center; padding:.5rem .6rem; border-bottom:1px solid rgba(255,255,255,.06); }
   .row:last-child{ border-bottom:none; }
   .pill{ padding:.25rem .6rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--muted); }
   .actions{ display:flex; gap:.6rem; justify-content:flex-end; }
 
-  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:9999; }
+  /* Universal lightbox style for both settings preview and main artwork view */
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter: blur(3px); display:none; align-items:center; justify-content:center; z-index:9999; cursor:pointer; }
   .lightbox.show{ display:flex; }
-  .lightbox img{ max-width:90vw; max-height:80vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); }
+  .lightbox img{ max-width:95vw; max-height:95vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); }
 
   @media (orientation: landscape){ .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); } }
   @media (orientation: portrait){ .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); } }
@@ -153,6 +145,8 @@
 
   <main class="stage">
     <section class="frame" id="frame">
+      <div class="frame-backdrop" id="frameBackdrop"></div>
+
       <aside class="side" id="side">
         <div class="clockWrap">
           <div class="clock" id="clock">--:--<span class="ampm" id="ampm"></span></div>
@@ -198,18 +192,13 @@
       <div class="field"><label>Auto accent</label>
         <select name="autoAccent"><option value="on">On</option><option value="off">Off</option></select>
       </div>
-      <div class="row" style="justify-content:space-between">
-        <strong>Today's repertoire</strong>
-        <span class="pill" id="selCount">0/5</span>
-      </div>
+      <div class="row" style="justify-content:space-between"><strong>Today's repertoire</strong><span class="pill" id="selCount">0/5</span></div>
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList" aria-label="Deck list"></div>
-      <div class="row" style="justify-content:space-between; margin-top: 1rem;">
-          <strong>Manage Data</strong>
-      </div>
+      <div class="row" style="justify-content:space-between; margin-top: 1rem;"><strong>Manage Data</strong></div>
       <div class="actions">
-          <button type="button" id="btnExport" class="btn">Download Progress</button>
-          <button type="button" id="btnImport" class="btn">Upload Progress</button>
+        <button type="button" id="btnExport" class="btn">Download Progress</button>
+        <button type="button" id="btnImport" class="btn">Upload Progress</button>
       </div>
       <input type="file" id="importFile" accept=".json" style="display:none;">
       <div class="actions" style="margin-top: 1rem;">
@@ -219,20 +208,18 @@
     </form>
   </dialog>
 
-  <div class="lightbox" id="imgPreview"><img alt="Preview" id="previewImg"></div>
+  <div class="lightbox" id="mainLightbox"><img id="mainLightboxImg" alt="Full artwork view"></div>
 
 <script>
 /* ===== Config & State ===== */
 const CONFIG_KEY = 'artSRS_config_v6';
 const STATE_KEY  = 'artSRS_state_v6';
 const TODAY_KEY  = 'artSRS_today_v3';
-const DEFAULTS = {
-  dailyCount:5, tImage:4, tArtist:3, tTitle:3, tDetails:4,
-  imageBase:'./art/', autoAccent:'on', easeDefault:2.5
-};
+const DEFAULTS = { dailyCount:5, tImage:4, tArtist:3, tTitle:3, tDetails:4, imageBase:'./art/', autoAccent:'on', easeDefault:2.5 };
 
 const el = {
   frame: document.getElementById('frame'),
+  frameBackdrop: document.getElementById('frameBackdrop'),
   img: document.getElementById('artImg'),
   tint: document.getElementById('tint'),
   clock: document.getElementById('clock'), ampm: document.getElementById('ampm'),
@@ -243,11 +230,10 @@ const el = {
   settings: document.getElementById('settings'), settingsForm: document.getElementById('settingsForm'),
   deckList: document.getElementById('deckList'), selCount: document.getElementById('selCount'), search: document.getElementById('search'),
   dailyCount: document.getElementById('dailyCount'),
-  artArea: document.getElementById('artArea'), backdrop: document.getElementById('backdrop'),
-  imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg'),
-  btnExport: document.getElementById('btnExport'),
-  btnImport: document.getElementById('btnImport'),
-  importFile: document.getElementById('importFile')
+  artArea: document.getElementById('artArea'),
+  mainLightbox: document.getElementById('mainLightbox'),
+  mainLightboxImg: document.getElementById('mainLightboxImg'),
+  btnExport: document.getElementById('btnExport'), btnImport: document.getElementById('btnImport'), importFile: document.getElementById('importFile')
 };
 
 let cfg = loadConfig();
@@ -269,16 +255,12 @@ function dayISO(d){ const z=new Date(d.getFullYear(), d.getMonth(), d.getDate())
 function isHttp(url){ return /^https?:/i.test(url); }
 function clearTimers(){ session.timers.forEach(t=>clearTimeout(t)); session.timers=[]; }
 function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); session.timers=[t]; }
-
-function cleanText(val){
-  if(val==null) return '';
-  const tmp=document.createElement('div'); tmp.innerHTML=String(val);
-  return (tmp.textContent||tmp.innerText||'').split(/\s+/).join(' ').trim();
-}
+function cleanText(val){ if(val==null) return ''; const tmp=document.createElement('div'); tmp.innerHTML=String(val); return (tmp.textContent||tmp.innerText||'').split(/\s+/).join(' ').trim(); }
 
 function ensureProgress(card){
-  if(!progress[card.id])
+  if(!progress[card.id]) {
     progress[card.id] = { ease: cfg.easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0, lastGrade:null };
+  }
   return progress[card.id];
 }
 
@@ -289,12 +271,16 @@ function grade(card, kind){
     else if(p.state==='learning'){
       if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); }
       else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); }
-    } else { const next=Math.round(Math.max(1, p.intervalDays * p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); }
+    }
+    else { const next=Math.round(Math.max(1, p.intervalDays*p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); }
     p.reps++;
   } else {
     p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000));
   }
-  p.lastGrade = kind; saveState(); showGradeFeedback(kind); updateChip();
+  p.lastGrade = kind;
+  saveState();
+  showGradeFeedback(kind);
+  updateChip();
 }
 
 function autoAccentFromImage(img){
@@ -303,256 +289,265 @@ function autoAccentFromImage(img){
     const w=c.width=80, h=c.height=80; ctx.drawImage(img,0,0,w,h);
     const data=ctx.getImageData(0,0,w,h).data; let r=0,g=0,b=0,cnt=0;
     for(let i=0;i<data.length;i+=4){ const a=data[i+3]; if(a<30) continue; r+=data[i]; g+=data[i+1]; b+=data[i+2]; cnt++; }
-    if(cnt){ r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
-      const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent',accent);
+    if(cnt){
+      r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
+      document.documentElement.style.setProperty('--accent',`rgb(${r},${g},${b})`);
     }
   }catch(e){}
   const url = img.currentSrc || img.src;
-  // JAVASCRIPT FIX: Set the background on the .frame, not the .backdrop
-  el.frame.style.backgroundImage = `url('${url}')`;
+  el.frameBackdrop.style.backgroundImage = `url('${url}')`;
 }
 
-function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm = h>=12? 'PM':'AM'; h = h%12 || 12; return {h, m, ampm}; }
-function startClock(){
-  const tick=()=>{ const d=new Date(); const {h,m,ampm}=fmtTime(d); el.clock.textContent=`${h}:${m}`; el.ampm.textContent=ampm; };
-  tick(); setInterval(tick, 15000);
-}
+function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm=h>=12?'PM':'AM'; h=h%12||12; return {h,m,ampm}; }
+function startClock(){ const tick=()=>{const d=new Date();const{h,m,ampm}=fmtTime(d);el.clock.textContent=`${h}:${m}`;el.ampm.textContent=ampm;}; tick(); setInterval(tick,15000); }
 
 function ensureToday(){
   const today=dayISO(new Date());
-  if(todaySel.date !== today){ todaySel = { date: today, ids: [] }; }
+  if(todaySel.date!==today) todaySel={date:today,ids:[]};
   if(!todaySel.ids.length){
-    const due=[], fresh=[];
-    for(const c of deck){ const p=ensureProgress(c); if(p.state!=='new' && p.dueISO<=today){ due.push(c.id); } else if(p.state==='new'){ fresh.push(c.id); } }
+    const due=[],fresh=[];
+    for(const c of deck){const p=ensureProgress(c);if(p.state!=='new'&&p.dueISO<=today)due.push(c.id);else if(p.state==='new')fresh.push(c.id);}
     const chosen=[...due.slice(0,cfg.dailyCount)];
-    for(const id of fresh){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(id)) chosen.push(id); }
-    if(chosen.length<Math.min(cfg.dailyCount, deck.length)){
-      for(const c of deck){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(c.id)) chosen.push(c.id); }
-    }
-    todaySel.ids = chosen.slice(0, cfg.dailyCount); saveToday();
+    for(const id of fresh){if(chosen.length>=cfg.dailyCount)break;if(!chosen.includes(id))chosen.push(id);}
+    if(chosen.length<Math.min(cfg.dailyCount,deck.length)){for(const c of deck){if(chosen.length>=cfg.dailyCount)break;if(!chosen.includes(c.id))chosen.push(c.id);}}
+    todaySel.ids=chosen.slice(0,cfg.dailyCount); saveToday();
   }
 }
 
 function buildPlaylist(){
   ensureToday();
   const map=new Map(deck.map(c=>[c.id,c]));
-  playlist = todaySel.ids.map(id=>map.get(id)).filter(Boolean);
-  if(!playlist.length && deck.length > 0){ playlist = deck.slice(0, cfg.dailyCount); todaySel.ids = playlist.map(c=>c.id); saveToday(); }
-  session.index=0; updateChip();
+  playlist=todaySel.ids.map(id=>map.get(id)).filter(Boolean);
+  if(!playlist.length&&deck.length>0){playlist=deck.slice(0,cfg.dailyCount);todaySel.ids=playlist.map(c=>c.id);saveToday();}
+  session.index=0;
+  updateChip();
 }
 
-function hideMeta(){ [el.artist, el.title, el.details].forEach(n => { n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)'; }); }
+function hideMeta(){ [el.artist,el.title,el.details].forEach(n=>{n.classList.remove('reveal');n.style.opacity=0;n.style.transform='translateY(8px)';}); }
 
 async function showCurrent(auto=true){
   const card=playlist[session.index];
-  if(!card){ el.title.textContent = 'No deck.json found or empty.'; return; }
-  resetGradeFeedback(); const p = progress[card.id]; if (p && p.lastGrade) { showGradeFeedback(p.lastGrade); }
+  if(!card){el.title.textContent='No deck.json found or empty.';return;}
+  resetGradeFeedback();
+  const p=progress[card.id];
+  if(p&&p.lastGrade) showGradeFeedback(p.lastGrade);
   hideMeta();
   await loadImageFor(card);
   if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
-  if(auto){ runReveal(); }
+  if(auto) runReveal();
   updateChip();
 }
 
 function loadImageFor(card){
-  return new Promise((resolve)=>{ const src = isHttp(card.image)? card.image : (cfg.imageBase||'./') + card.image;
-    el.img.onload=()=>resolve(); el.img.onerror=()=>resolve(); el.img.src=src;
+  return new Promise((resolve)=>{
+    const src=isHttp(card.image)?card.image:(cfg.imageBase||'./')+card.image;
+    el.img.onload=()=>resolve();
+    el.img.onerror=()=>resolve();
+    el.img.src=src;
   });
 }
 
 function revealStep(){
-  const card=playlist[session.index]; if(!card) return;
-  const map=[null, el.artist, el.title, el.details];
-  const node = map[session.phase]; if(!node) return;
-  const contentMap = { artist: card.artist, title: card.title, details: [card.date, card.style].filter(Boolean).join(' • ') };
-  node.textContent = cleanText(contentMap[node.id]);
-  node.classList.add('reveal'); node.removeAttribute('aria-hidden');
+  const card=playlist[session.index]; if(!card)return;
+  const map=[null,el.artist,el.title,el.details];
+  const node=map[session.phase]; if(!node)return;
+  const contentMap={artist:card.artist,title:card.title,details:[card.date,card.style].filter(Boolean).join(' • ')};
+  node.textContent=cleanText(contentMap[node.id]);
+  node.classList.add('reveal');
+  node.removeAttribute('aria-hidden');
 }
 
-function runRevealFromCurrentPhase() {
-    const plan = [cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-    function scheduleNext() {
-        if (session.phase > 0) revealStep();
-        if (session.phase < 3) {
-            restartTimer(plan[session.phase] * 1000, () => {
-                session.phase++;
-                scheduleNext();
-            });
-        } else {
-            restartTimer(plan[3] * 1000, () => { nextCard(); });
-        }
+function runRevealFromCurrentPhase(){
+  const plan=[cfg.tImage,cfg.tArtist,cfg.tTitle,cfg.tDetails].map(Number);
+  function scheduleNext(){
+    if(session.phase>0) revealStep();
+    if(session.phase<3){
+      restartTimer(plan[session.phase]*1000,()=>{session.phase++;scheduleNext();});
+    } else {
+      restartTimer(plan[3]*1000,()=>{nextCard();});
     }
-    scheduleNext();
+  }
+  scheduleNext();
 }
 
 function runReveal(){ session.phase=0; runRevealFromCurrentPhase(); }
-function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
+function nextCard(){ if(!playlist.length)return; session.index=(session.index+1)%playlist.length; showCurrent(true); }
 
-function hideStepVisual(phaseToHide) {
-    const map = [null, el.artist, el.title, el.details];
-    const node = map[phaseToHide];
-    if (node) { node.classList.remove('reveal'); node.setAttribute('aria-hidden', 'true'); }
+function hideStepVisual(phaseToHide){
+  const map=[null,el.artist,el.title,el.details];
+  const node=map[phaseToHide];
+  if(node){node.classList.remove('reveal');node.setAttribute('aria-hidden','true');}
 }
 
-function showAllMeta() {
-    const card = playlist[session.index]; if (!card) return;
-    el.artist.textContent = cleanText(card.artist);
-    el.title.textContent = cleanText(card.title);
-    el.details.textContent = cleanText([card.date, card.style].filter(Boolean).join(' • '));
-    [el.artist, el.title, el.details].forEach(n => { n.classList.add('reveal'); n.removeAttribute('aria-hidden'); });
+function showAllMeta(){
+  const card=playlist[session.index]; if(!card)return;
+  el.artist.textContent=cleanText(card.artist);
+  el.title.textContent=cleanText(card.title);
+  el.details.textContent=cleanText([card.date,card.style].filter(Boolean).join(' • '));
+  [el.artist,el.title,el.details].forEach(n=>{n.classList.add('reveal');n.removeAttribute('aria-hidden');});
 }
 
-async function stepBackward() {
-    clearTimers();
-    const plan = [cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-    if (session.phase > 0) {
-        hideStepVisual(session.phase);
-        session.phase--;
-        restartTimer(plan[session.phase] * 1000, runRevealFromCurrentPhase);
-    } else {
-        session.index = (session.index - 1 + playlist.length) % playlist.length;
-        await showCurrent(false);
-        session.phase = 3;
-        showAllMeta();
-        restartTimer(plan[3] * 1000, () => { nextCard(); });
-    }
+async function stepBackward(){
+  clearTimers();
+  const plan=[cfg.tImage,cfg.tArtist,cfg.tTitle,cfg.tDetails].map(Number);
+  if(session.phase>0){
+    hideStepVisual(session.phase);
+    session.phase--;
+    restartTimer(plan[session.phase]*1000,runRevealFromCurrentPhase);
+  } else {
+    session.index=(session.index-1+playlist.length)%playlist.length;
+    await showCurrent(false);
+    session.phase=3;
+    showAllMeta();
+    restartTimer(plan[3]*1000,()=>{nextCard();});
+  }
 }
 
-function showGradeFeedback(kind){
-  if(kind==='good'){ el.btnGood.classList.add('selected'); el.btnBad.classList.remove('selected'); }
-  else { el.btnBad.classList.add('selected'); el.btnGood.classList.remove('selected'); }
-}
-function resetGradeFeedback() { el.btnGood.classList.remove('selected'); el.btnBad.classList.remove('selected'); }
-function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
+function showGradeFeedback(kind){ if(kind==='good'){el.btnGood.classList.add('selected');el.btnBad.classList.remove('selected');}else{el.btnBad.classList.add('selected');el.btnGood.classList.remove('selected');}}
+function resetGradeFeedback(){el.btnGood.classList.remove('selected');el.btnBad.classList.remove('selected');}
+function updateChip(){const n=playlist.length||0;const i=Math.min(session.index+1,Math.max(n,1));el.chip.textContent=`Today ${i}/${n}`;}
 
 function openSettings(){
   const f=el.settingsForm;
-  f.dailyCount.value = cfg.dailyCount; f.imageBase.value = cfg.imageBase; f.tImage.value = cfg.tImage;
-  f.tArtist.value = cfg.tArtist; f.tTitle.value = cfg.tTitle; f.tDetails.value = cfg.tDetails;
-  f.autoAccent.value = cfg.autoAccent; buildDeckListFresh(); el.settings.showModal();
+  f.dailyCount.value=cfg.dailyCount;f.imageBase.value=cfg.imageBase;f.tImage.value=cfg.tImage;
+  f.tArtist.value=cfg.tArtist;f.tTitle.value=cfg.tTitle;f.tDetails.value=cfg.tDetails;f.autoAccent.value=cfg.autoAccent;
+  buildDeckListFresh();
+  el.settings.showModal();
 }
 
-let tempSel = new Set();
+let tempSel=new Set();
 function buildDeckListFresh(){
-  const term=(el.search.value||'').toLowerCase(); tempSel = new Set(todaySel.ids); el.deckList.innerHTML='';
-  let selectedCount = tempSel.size;
-  const updateSelCount=()=>{ el.selCount.textContent = `${selectedCount}/${cfg.dailyCount}`; el.dailyCount.value = cfg.dailyCount; };
+  const term=(el.search.value||'').toLowerCase();
+  tempSel=new Set(todaySel.ids);
+  el.deckList.innerHTML='';
+  let selectedCount=tempSel.size;
+  const updateSelCount=()=>{el.selCount.textContent=`${selectedCount}/${cfg.dailyCount}`;el.dailyCount.value=cfg.dailyCount;};
   for(const c of deck){
-    const artist=cleanText(c.artist), title=cleanText(c.title);
-    if(term && !(artist.toLowerCase().includes(term)||title.toLowerCase().includes(term))) continue;
-    const row=document.createElement('div'); row.className='row'; row.dataset.id=c.id;
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=tempSel.has(c.id);
-    const label=document.createElement('div'); label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
-    const preview=document.createElement('button'); preview.className='btn'; preview.textContent='Image';
+    const artist=cleanText(c.artist),title=cleanText(c.title);
+    if(term&&!(artist.toLowerCase().includes(term)||title.toLowerCase().includes(term)))continue;
+    const row=document.createElement('div');row.className='row';row.dataset.id=c.id;
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=tempSel.has(c.id);
+    const label=document.createElement('div');label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
+    const preview=document.createElement('button');preview.className='btn';preview.textContent='Image';
     cb.addEventListener('change',()=>{
-      if(cb.checked){ if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; }
-        tempSel.add(c.id); selectedCount = tempSel.size; updateSelCount(); preview.disabled=false;
-      } else { tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount(); }
+      if(cb.checked){if(selectedCount>=cfg.dailyCount){cfg.dailyCount=selectedCount+1;} tempSel.add(c.id);selectedCount=tempSel.size;updateSelCount();preview.disabled=false;}
+      else{tempSel.delete(c.id);selectedCount=tempSel.size;updateSelCount();}
     });
-    preview.addEventListener('click',(e)=>{ e.preventDefault();
-      const src = isHttp(c.image)? c.image : (cfg.imageBase||'./') + c.image;
-      el.previewImg.src = src; el.imgPreview.classList.add('show');
+    preview.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const src=isHttp(c.image)?c.image:(cfg.imageBase||'./')+c.image;
+      el.mainLightboxImg.src=src;
+      el.mainLightbox.classList.add('show');
     });
-    row.appendChild(cb); row.appendChild(label); row.appendChild(preview);
+    row.appendChild(cb);row.appendChild(label);row.appendChild(preview);
     el.deckList.appendChild(row);
   }
   updateSelCount();
 }
 
-function exportData() {
-    const dataToExport = { config: loadConfig(), state: loadState() };
-    const jsonString = JSON.stringify(dataToExport, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `art_slideshow_progress_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+function exportData(){
+  const dataToExport={config:loadConfig(),state:loadState()};
+  const jsonString=JSON.stringify(dataToExport,null,2);
+  const blob=new Blob([jsonString],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`art_slideshow_progress_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 }
-function importData() { el.importFile.click(); }
-el.importFile.addEventListener('change', (event) => {
-    const file = event.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try { const data = JSON.parse(e.target.result);
-            if (data && data.config && data.state) {
-                localStorage.setItem(CONFIG_KEY, JSON.stringify(data.config));
-                localStorage.setItem(STATE_KEY, JSON.stringify(data.state));
-                localStorage.removeItem(TODAY_KEY);
-                alert('Progress imported successfully! The page will now reload.');
-                location.reload();
-            } else { alert('Invalid import file.'); }
-        } catch (error) { alert('Error parsing file: ' + error.message); }
-        event.target.value = '';
-    };
-    reader.readAsText(file);
+
+function importData(){el.importFile.click();}
+
+el.importFile.addEventListener('change',(event)=>{
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(data&&data.config&&data.state){
+        localStorage.setItem(CONFIG_KEY,JSON.stringify(data.config));
+        localStorage.setItem(STATE_KEY,JSON.stringify(data.state));
+        localStorage.removeItem(TODAY_KEY);
+        alert('Progress imported successfully! The page will now reload.');
+        location.reload();
+      }else{alert('Invalid import file.');}
+    }catch(error){alert('Error parsing file: '+error.message);}
+    event.target.value='';
+  };
+  reader.readAsText(file);
 });
 
-el.imgPreview.addEventListener('click', ()=>{ el.imgPreview.classList.remove('show'); el.previewImg.src=''; });
-el.search.addEventListener('input', buildDeckListFresh);
-el.settingsForm.addEventListener('submit', (e)=>{
-  const action = e.submitter && e.submitter.value;
+el.settingsForm.addEventListener('submit',(e)=>{
+  const action=e.submitter&&e.submitter.value;
   if(action==='save'){
-    const f = el.settingsForm;
-    cfg.dailyCount = Math.max(1, +f.dailyCount.value||cfg.dailyCount);
-    cfg.imageBase = f.imageBase.value.trim()||'./art/';
-    cfg.tImage=+f.tImage.value||4; cfg.tArtist=+f.tArtist.value||3;
-    cfg.tTitle=+f.tTitle.value||3; cfg.tDetails=+f.tDetails.value||4;
-    cfg.autoAccent=f.autoAccent.value; saveConfig();
-    todaySel.ids = Array.from(tempSel).slice(0, cfg.dailyCount);
-    saveToday(); buildPlaylist(); showCurrent(true);
+    const f=el.settingsForm;
+    cfg.dailyCount=Math.max(1,+f.dailyCount.value||cfg.dailyCount);
+    cfg.imageBase=f.imageBase.value.trim()||'./art/';
+    cfg.tImage=+f.tImage.value||4;cfg.tArtist=+f.tArtist.value||3;
+    cfg.tTitle=+f.tTitle.value||3;cfg.tDetails=+f.tDetails.value||4;
+    cfg.autoAccent=f.autoAccent.value;
+    saveConfig();
+    todaySel.ids=Array.from(tempSel).slice(0,cfg.dailyCount);
+    saveToday();buildPlaylist();showCurrent(true);
   }
-  e.preventDefault(); el.settings.close();
+  e.preventDefault();el.settings.close();
 });
 
 function onHitClick(e){
-  if(suppressNextClick){ suppressNextClick=false; return; }
-  const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left;
-  if(x < rect.width/2){ stepBackward(); }
-  else {
-    if(session.phase<3){
-      clearTimers();
-      session.phase++;
-      runRevealFromCurrentPhase();
-    } else { nextCard(); }
-  }
+  if(suppressNextClick){suppressNextClick=false;return;}
+  const rect=e.currentTarget.getBoundingClientRect();const x=e.clientX-rect.left;
+  if(x<rect.width/2){stepBackward();}
+  else{if(session.phase<3){clearTimers();session.phase++;runRevealFromCurrentPhase();}else{nextCard();}}
 }
 
-let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=550; const MOVE_TOL=12;
+let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=500; const MOVE_TOL=12;
 function onTouchStart(e){
   const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY;
-  const artRect = el.artArea.getBoundingClientRect();
-  if(t.clientX<artRect.left || t.clientX>artRect.right || t.clientY<artRect.top || t.clientY>artRect.bottom){ return; }
-  lpTimer=setTimeout(()=>{ el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200); }, LONG_PRESS_MS);
+  const artRect=el.artArea.getBoundingClientRect();
+  if(t.clientX<artRect.left||t.clientX>artRect.right||t.clientY<artRect.top||t.clientY>artRect.bottom)return;
+  lpTimer=setTimeout(()=>{
+    suppressNextClick=true;
+    const card = playlist[session.index]; if(!card) return;
+    const src = isHttp(card.image) ? card.image : (cfg.imageBase||'./') + card.image;
+    el.mainLightboxImg.src = src;
+    el.mainLightbox.classList.add('show');
+  }, LONG_PRESS_MS);
 }
-function onTouchMove(e){ if(!lpTimer) return; const t=e.touches[0]; if(Math.abs(t.clientX-touchStartX)>MOVE_TOL || Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; } }
-function onTouchEnd(){ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }
 
-el.hits.addEventListener('click', onHitClick);
-el.hits.addEventListener('touchstart', onTouchStart, {passive:true});
-el.hits.addEventListener('touchmove', onTouchMove, {passive:true});
-el.hits.addEventListener('touchend', onTouchEnd, {passive:true});
-el.hits.addEventListener('touchcancel', onTouchEnd, {passive:true});
+function onTouchMove(e){
+  if(!lpTimer)return;
+  const t=e.touches[0];
+  if(Math.abs(t.clientX-touchStartX)>MOVE_TOL||Math.abs(t.clientY-touchStartY)>MOVE_TOL){clearTimeout(lpTimer);lpTimer=null;}
+}
 
-el.btnGood.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'good'); });
-el.btnBad.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'bad'); });
-el.btnSettings.addEventListener('click', ()=>{ openSettings(); });
-el.btnExport.addEventListener('click', exportData);
-el.btnImport.addEventListener('click', importData);
+function onTouchEnd(){if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}}
 
-window.addEventListener('keydown', (e)=>{
-  if(e.key==='ArrowRight'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.75}); }
-  else if(e.key==='ArrowLeft'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.25}); }
-  else if(e.key.toLowerCase()==='g'){ if(playlist.length) grade(playlist[session.index],'good'); }
-  else if(e.key.toLowerCase()==='b'){ if(playlist.length) grade(playlist[session.index],'bad'); }
-  else if(e.key.toLowerCase()==='s'){ openSettings(); }
+el.hits.addEventListener('click',onHitClick);
+el.hits.addEventListener('touchstart',onTouchStart,{passive:true});
+el.hits.addEventListener('touchmove',onTouchMove,{passive:true});
+el.hits.addEventListener('touchend',onTouchEnd,{passive:true});
+el.hits.addEventListener('touchcancel',onTouchEnd,{passive:true});
+el.btnGood.addEventListener('click',()=>{if(!playlist.length)return;grade(playlist[session.index],'good');});
+el.btnBad.addEventListener('click',()=>{if(!playlist.length)return;grade(playlist[session.index],'bad');});
+el.btnSettings.addEventListener('click',()=>{openSettings();});
+el.btnExport.addEventListener('click',exportData);
+el.btnImport.addEventListener('click',importData);
+el.mainLightbox.addEventListener('click', () => { el.mainLightbox.classList.remove('show'); });
+
+window.addEventListener('keydown',(e)=>{
+  if(el.settings.open) return;
+  if(e.key==='ArrowRight'){onHitClick({currentTarget:el.hits,clientX:el.hits.getBoundingClientRect().left+el.hits.offsetWidth*0.75});}
+  else if(e.key==='ArrowLeft'){onHitClick({currentTarget:el.hits,clientX:el.hits.getBoundingClientRect().left+el.hits.offsetWidth*0.25});}
+  else if(e.key.toLowerCase()==='g'){if(playlist.length)grade(playlist[session.index],'good');}
+  else if(e.key.toLowerCase()==='b'){if(playlist.length)grade(playlist[session.index],'bad');}
+  else if(e.key.toLowerCase()==='s'){openSettings();}
 });
 
 async function init(){
   startClock();
-  try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
-  deck = deck.map(card=>({ ...card, id: String(card.id), artist: cleanText(card.artist), title: cleanText(card.title), date: cleanText(card.date), style: cleanText(card.style) }));
-  if(!deck.length){ el.title.textContent = 'No deck.json found or empty.'; return; }
-  ensureToday(); buildPlaylist(); showCurrent(true);
+  try{const res=await fetch('deck.json');deck=await res.json();}catch(e){deck=[];}
+  deck=deck.map(card=>({...card,id:String(card.id),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
+  if(!deck.length){el.title.textContent='No deck.json found or empty.';return;}
+  ensureToday();buildPlaylist();showCurrent(true);
 }
 init();
 </script>
