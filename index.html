@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale-1" />
 <title>Art Nightstand Slideshow</title>
 <style>
   :root{
@@ -31,12 +31,10 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Full-viewport ambient backdrop (blurred current artwork) */
+  /* VISUAL FIX: This is now the solid black background for the whole page */
   .backdrop{
     position:fixed; inset:0; z-index:0;
-    background-position:center; background-size:cover;
-    filter: blur(40px) brightness(.35) saturate(.9);
-    transform: scale(1.12);
+    background:var(--bg);
     pointer-events:none;
   }
 
@@ -48,11 +46,26 @@
   .frame{
     position:relative; width:100%; height:100%; max-width:1600px;
     aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
-    /* VISUAL TWEAK: Set a pure black background for the frame */
-    background-color: #000;
     box-shadow:var(--shadow);
     display:grid; grid-template-columns:34% 66%;
-    user-select:none; /* avoid page-wide highlight when long-press */
+    user-select:none;
+    /* This will be the hook for the JS to set the background image */
+    background-image: inherit;
+  }
+
+  /* VISUAL FIX: The blurred artwork is now the background of the frame itself,
+     using a pseudo-element so it doesn't blur the content (text/image) */
+  .frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1; /* Sits behind the grid content */
+    background-image: inherit; /* Takes the image from the parent .frame */
+    background-position: center;
+    background-size: cover;
+    filter: blur(40px) brightness(.35) saturate(.9);
+    transform: scale(1.12);
+    border-radius: inherit; /* Important for respecting the parent's rounded corners */
   }
 
   /* Left column: clock + meta */
@@ -108,10 +121,7 @@
   .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
   .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; outline:none; filter:none; }
 
-  /* Remove floating mark overlay */
   .mark{ display:none; }
-
-  /* Progress chip */
   .chip{ position:absolute; top:.6rem; right:.6rem; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:.25rem .6rem; color:var(--muted); font-size:.9rem; z-index:6; }
 
   /* Settings modal */
@@ -130,12 +140,10 @@
   .pill{ padding:.25rem .6rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--muted); }
   .actions{ display:flex; gap:.6rem; justify-content:flex-end; }
 
-  /* Image preview overlay in settings */
   .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:9999; }
   .lightbox.show{ display:flex; }
   .lightbox img{ max-width:90vw; max-height:80vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); }
 
-  /* Responsive clock sizes */
   @media (orientation: landscape){ .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); } }
   @media (orientation: portrait){ .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); } }
 </style>
@@ -145,7 +153,6 @@
 
   <main class="stage">
     <section class="frame" id="frame">
-      <!-- Left panel: clock + meta -->
       <aside class="side" id="side">
         <div class="clockWrap">
           <div class="clock" id="clock">--:--<span class="ampm" id="ampm"></span></div>
@@ -156,20 +163,14 @@
           <div id="details" class="sub" aria-hidden="true"></div>
         </div>
       </aside>
-
-      <!-- Right: artwork -->
       <div class="art" id="artArea">
         <div class="tint" id="tint"></div>
         <img id="artImg" alt="Artwork" />
       </div>
-
-      <!-- Tap hit areas spanning the whole frame -->
       <div class="hits" id="hits">
         <div class="hit" id="hitLeft" aria-label="Back"></div>
         <div class="hit" id="hitRight" aria-label="Forward"></div>
       </div>
-
-      <!-- Footer -->
       <div class="footer">
         <div class="leftGroup">
           <button id="btnBad" class="btn bad">Not yet</button>
@@ -181,7 +182,6 @@
     </section>
   </main>
 
-  <!-- Settings Modal -->
   <dialog id="settings" tabindex="-1">
     <form method="dialog" class="modal" id="settingsForm">
       <h3 style="margin:.2rem 0 .2rem">Settings</h3>
@@ -198,14 +198,12 @@
       <div class="field"><label>Auto accent</label>
         <select name="autoAccent"><option value="on">On</option><option value="off">Off</option></select>
       </div>
-
       <div class="row" style="justify-content:space-between">
         <strong>Today's repertoire</strong>
         <span class="pill" id="selCount">0/5</span>
       </div>
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList" aria-label="Deck list"></div>
-
       <div class="row" style="justify-content:space-between; margin-top: 1rem;">
           <strong>Manage Data</strong>
       </div>
@@ -214,7 +212,6 @@
           <button type="button" id="btnImport" class="btn">Upload Progress</button>
       </div>
       <input type="file" id="importFile" accept=".json" style="display:none;">
-
       <div class="actions" style="margin-top: 1rem;">
         <button class="btn" value="cancel">Close</button>
         <button class="btn good" value="save">Save</button>
@@ -222,7 +219,6 @@
     </form>
   </dialog>
 
-  <!-- Lightbox for image preview within settings -->
   <div class="lightbox" id="imgPreview"><img alt="Preview" id="previewImg"></div>
 
 <script>
@@ -277,11 +273,9 @@ function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); sessio
 function cleanText(val){
   if(val==null) return '';
   const tmp=document.createElement('div'); tmp.innerHTML=String(val);
-  const text=tmp.textContent||tmp.innerText||'';
-  return text.split(/\s+/).join(' ').trim();
+  return (tmp.textContent||tmp.innerText||'').split(/\s+/).join(' ').trim();
 }
 
-/* ===== SRS Progress ===== */
 function ensureProgress(card){
   if(!progress[card.id])
     progress[card.id] = { ease: cfg.easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0, lastGrade:null };
@@ -303,7 +297,6 @@ function grade(card, kind){
   p.lastGrade = kind; saveState(); showGradeFeedback(kind); updateChip();
 }
 
-/* ===== Accent & Backdrop ===== */
 function autoAccentFromImage(img){
   try{
     const c=document.createElement('canvas'); const ctx=c.getContext('2d',{willReadFrequently:true});
@@ -315,17 +308,16 @@ function autoAccentFromImage(img){
     }
   }catch(e){}
   const url = img.currentSrc || img.src;
-  el.backdrop.style.backgroundImage = `url('${url}')`;
+  // JAVASCRIPT FIX: Set the background on the .frame, not the .backdrop
+  el.frame.style.backgroundImage = `url('${url}')`;
 }
 
-/* ===== Clock (12-hour) ===== */
 function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm = h>=12? 'PM':'AM'; h = h%12 || 12; return {h, m, ampm}; }
 function startClock(){
   const tick=()=>{ const d=new Date(); const {h,m,ampm}=fmtTime(d); el.clock.textContent=`${h}:${m}`; el.ampm.textContent=ampm; };
   tick(); setInterval(tick, 15000);
 }
 
-/* ===== Today & Playlist ===== */
 function ensureToday(){
   const today=dayISO(new Date());
   if(todaySel.date !== today){ todaySel = { date: today, ids: [] }; }
@@ -349,7 +341,6 @@ function buildPlaylist(){
   session.index=0; updateChip();
 }
 
-/* ===== Render ===== */
 function hideMeta(){ [el.artist, el.title, el.details].forEach(n => { n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)'; }); }
 
 async function showCurrent(auto=true){
@@ -397,7 +388,6 @@ function runRevealFromCurrentPhase() {
 function runReveal(){ session.phase=0; runRevealFromCurrentPhase(); }
 function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
 
-// --- LOGIC CHANGE: Rewritten "stepBackward" functionality ---
 function hideStepVisual(phaseToHide) {
     const map = [null, el.artist, el.title, el.details];
     const node = map[phaseToHide];
@@ -415,27 +405,18 @@ function showAllMeta() {
 async function stepBackward() {
     clearTimers();
     const plan = [cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-
     if (session.phase > 0) {
-        // Current artwork has info visible. Hide the top-most layer of info.
         hideStepVisual(session.phase);
         session.phase--;
         restartTimer(plan[session.phase] * 1000, runRevealFromCurrentPhase);
     } else {
-        // At image-only view. Go to the previous artwork and show it fully revealed.
         session.index = (session.index - 1 + playlist.length) % playlist.length;
-        await showCurrent(false); // Load image, backdrop, reset buttons etc., but don't start auto-timer.
-
-        // Instantly show all info.
+        await showCurrent(false);
         session.phase = 3;
         showAllMeta();
-
-        // Start the timer for the final step (details), which will then lead to the next card.
         restartTimer(plan[3] * 1000, () => { nextCard(); });
     }
 }
-
-// --- End of logic change ---
 
 function showGradeFeedback(kind){
   if(kind==='good'){ el.btnGood.classList.add('selected'); el.btnBad.classList.remove('selected'); }
@@ -444,7 +425,6 @@ function showGradeFeedback(kind){
 function resetGradeFeedback() { el.btnGood.classList.remove('selected'); el.btnBad.classList.remove('selected'); }
 function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
 
-/* ===== Settings modal ===== */
 function openSettings(){
   const f=el.settingsForm;
   f.dailyCount.value = cfg.dailyCount; f.imageBase.value = cfg.imageBase; f.tImage.value = cfg.tImage;
@@ -479,7 +459,6 @@ function buildDeckListFresh(){
   updateSelCount();
 }
 
-/* ===== Data Import/Export ===== */
 function exportData() {
     const dataToExport = { config: loadConfig(), state: loadState() };
     const jsonString = JSON.stringify(dataToExport, null, 2);
@@ -508,8 +487,6 @@ el.importFile.addEventListener('change', (event) => {
     reader.readAsText(file);
 });
 
-
-/* ===== Events ===== */
 el.imgPreview.addEventListener('click', ()=>{ el.imgPreview.classList.remove('show'); el.previewImg.src=''; });
 el.search.addEventListener('input', buildDeckListFresh);
 el.settingsForm.addEventListener('submit', (e)=>{
@@ -570,7 +547,6 @@ window.addEventListener('keydown', (e)=>{
   else if(e.key.toLowerCase()==='s'){ openSettings(); }
 });
 
-/* ===== Init ===== */
 async function init(){
   startClock();
   try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
