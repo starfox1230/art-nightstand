@@ -41,11 +41,16 @@
   }
 
   /* Stage centers a 16:9 frame; backdrop shows around it */
-  .stage{ position:relative; z-index:1; display:grid; place-items:center; width:100%; height:100vh; padding:1rem; }
+  .stage{
+    position:relative; z-index:1; display:grid; place-items:center;
+    width:100%; height:100vh; padding:1rem;
+    /* FIX: Gradient moved here to fill the entire screen background */
+    background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%);
+  }
   .frame{
     position:relative; width:100%; height:100%; max-width:1600px;
     aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
-    background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%);
+    /* Gradient removed from here */
     box-shadow:var(--shadow);
     display:grid; grid-template-columns:34% 66%;
     user-select:none; /* avoid page-wide highlight when long-press */
@@ -123,7 +128,6 @@
   .list{ max-height:45vh; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
   .row{ display:grid; grid-template-columns:auto 1fr auto; gap:.6rem; align-items:center; padding:.5rem .6rem; border-bottom:1px solid rgba(255,255,255,.06); }
   .row:last-child{ border-bottom:none; }
-  .row small{ color:var(--muted); }
   .pill{ padding:.25rem .6rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--muted); }
   .actions{ display:flex; gap:.6rem; justify-content:flex-end; }
 
@@ -203,7 +207,17 @@
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList" aria-label="Deck list"></div>
 
+      <!-- NEW: Import/Export Data -->
+      <div class="row" style="justify-content:space-between; margin-top: 1rem;">
+          <strong>Manage Data</strong>
+      </div>
       <div class="actions">
+          <button type="button" id="btnExport" class="btn">Download Progress</button>
+          <button type="button" id="btnImport" class="btn">Upload Progress</button>
+      </div>
+      <input type="file" id="importFile" accept=".json" style="display:none;">
+
+      <div class="actions" style="margin-top: 1rem;">
         <button class="btn" value="cancel">Close</button>
         <button class="btn good" value="save">Save</button>
       </div>
@@ -236,7 +250,11 @@ const el = {
   deckList: document.getElementById('deckList'), selCount: document.getElementById('selCount'), search: document.getElementById('search'),
   dailyCount: document.getElementById('dailyCount'),
   artArea: document.getElementById('artArea'), backdrop: document.getElementById('backdrop'),
-  imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg')
+  imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg'),
+  // NEW: Elements for import/export
+  btnExport: document.getElementById('btnExport'),
+  btnImport: document.getElementById('btnImport'),
+  importFile: document.getElementById('importFile')
 };
 
 let cfg = loadConfig();
@@ -300,7 +318,6 @@ function autoAccentFromImage(img){
       const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent',accent);
     }
   }catch(e){}
-  // update blurred backdrop
   const url = img.currentSrc || img.src;
   el.backdrop.style.backgroundImage = `url('${url}')`;
 }
@@ -332,7 +349,7 @@ function buildPlaylist(){
   ensureToday();
   const map=new Map(deck.map(c=>[c.id,c]));
   playlist = todaySel.ids.map(id=>map.get(id)).filter(Boolean);
-  if(!playlist.length){ playlist = deck.slice(0, cfg.dailyCount); todaySel.ids = playlist.map(c=>c.id); saveToday(); }
+  if(!playlist.length && deck.length > 0){ playlist = deck.slice(0, cfg.dailyCount); todaySel.ids = playlist.map(c=>c.id); saveToday(); }
   session.index=0; updateChip();
 }
 
@@ -357,6 +374,14 @@ function updateChip(){ const n=playlist.length||0; const i=Math.min(session.inde
 async function showCurrent(auto=true){
   const card=playlist[session.index];
   if(!card){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
+
+  // FIX: Reset grade buttons and show saved grade for this specific artwork
+  resetGradeFeedback();
+  const p = progress[card.id];
+  if (p && p.lastGrade) {
+    showGradeFeedback(p.lastGrade);
+  }
+
   hideMeta(); setMeta('', '', '');
   await loadImageFor(card);
   if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
@@ -388,24 +413,26 @@ function runReveal(){
 
 function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
 
-/* Back one fact; if crossing to previous artwork, show artist+title immediately, then details next */
+// FIX: "Going back" logic updated for smoother transitions
 async function stepBackward(){
+  clearTimers();
   if(session.phase > 0){
     session.phase--;
     hideStepVisualBeyond(session.phase);
-    const delays=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-    restartTimer(delays[session.phase]*1000, ()=>{
-      if(session.phase<3){ session.phase++; revealStep(); } else { nextCard(); }
-    });
+    const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+    function scheduleNext(){
+      if(session.phase<3){
+        restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); });
+      } else {
+        restartTimer(plan[3]*1000, ()=>{ nextCard(); });
+      }
+    }
+    scheduleNext();
   } else {
+    // This part is fixed: it now correctly goes to the previous card
+    // and triggers the full, timed reveal sequence from the beginning.
     session.index = (session.index-1+playlist.length)%playlist.length;
-    await showCurrent(false);          // load but don't auto-run
-    session.phase = 1; revealStep();   // artist
-    session.phase = 2; revealStep();   // title
-    restartTimer((+cfg.tTitle || 3)*1000, ()=>{
-      session.phase = 3; revealStep(); // details
-      restartTimer((+cfg.tDetails || 4)*1000, ()=>{ nextCard(); });
-    });
+    await showCurrent(true);
   }
 }
 
@@ -417,10 +444,14 @@ function hideStepVisualBeyond(phase){
   }
 }
 
-/* Keep only the button highlight (no overlay mark) */
+// FIX: Functions to manage grade button state
 function showGradeFeedback(kind){
   if(kind==='good'){ el.btnGood.classList.add('selected'); el.btnBad.classList.remove('selected'); }
   else { el.btnBad.classList.add('selected'); el.btnGood.classList.remove('selected'); }
+}
+function resetGradeFeedback() {
+  el.btnGood.classList.remove('selected');
+  el.btnBad.classList.remove('selected');
 }
 
 /* ===== Settings modal ===== */
@@ -437,9 +468,7 @@ function openSettings(){
   el.settings.showModal();
   setTimeout(()=>{ document.activeElement && document.activeElement.blur(); el.settings.focus({preventScroll:true}); }, 0);
 }
-function closeSettings(){ el.settings.close(); }
 
-/* Live selection state inside modal */
 let tempSel = new Set();
 function buildDeckListFresh(){
   const term=(el.search.value||'').toLowerCase();
@@ -458,7 +487,7 @@ function buildDeckListFresh(){
 
     cb.addEventListener('change',()=>{
       if(cb.checked){
-        if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; } // quietly bump limit
+        if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; }
         tempSel.add(c.id); selectedCount = tempSel.size; updateSelCount(); preview.disabled=false;
       } else {
         tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount();
@@ -477,6 +506,55 @@ function buildDeckListFresh(){
   updateSelCount();
 }
 
+/* ===== NEW: Data Import/Export ===== */
+function exportData() {
+    const dataToExport = {
+        config: loadConfig(),
+        state: loadState()
+    };
+    const jsonString = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `art_slideshow_progress_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importData() {
+    el.importFile.click();
+}
+
+el.importFile.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data && data.config && data.state) {
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(data.config));
+                localStorage.setItem(STATE_KEY, JSON.stringify(data.state));
+                localStorage.removeItem(TODAY_KEY); // Force playlist rebuild on reload
+                alert('Progress imported successfully! The page will now reload.');
+                location.reload();
+            } else {
+                alert('Invalid import file. Make sure it contains "config" and "state" data.');
+            }
+        } catch (error) {
+            alert('Error parsing file: ' + error.message);
+        }
+        event.target.value = ''; // Allow re-uploading the same file
+    };
+    reader.readAsText(file);
+});
+
+
+/* ===== Events ===== */
 el.imgPreview.addEventListener('click', ()=>{
   el.imgPreview.classList.remove('show'); el.previewImg.src='';
 });
@@ -499,7 +577,6 @@ el.settingsForm.addEventListener('submit', (e)=>{
   e.preventDefault(); el.settings.close();
 });
 
-/* ===== Events ===== */
 function onHitClick(e){
   if(suppressNextClick){ suppressNextClick=false; return; }
   const rect = e.currentTarget.getBoundingClientRect();
@@ -517,14 +594,12 @@ function onHitClick(e){
   }
 }
 
-// Long-press to allow native image actions on the artwork (phones)
 let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=550; const MOVE_TOL=12;
 function onTouchStart(e){
   const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY;
   const artRect = el.artArea.getBoundingClientRect();
   if(t.clientX<artRect.left || t.clientX>artRect.right || t.clientY<artRect.top || t.clientY>artRect.bottom){ return; }
   lpTimer=setTimeout(()=>{
-    // temporarily disable hit overlay so the image receives the long-press
     el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200);
   }, LONG_PRESS_MS);
 }
@@ -543,8 +618,9 @@ el.hits.addEventListener('touchcancel', onTouchEnd, {passive:true});
 el.btnGood.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'good'); });
 el.btnBad.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'bad'); });
 el.btnSettings.addEventListener('click', ()=>{ openSettings(); });
+el.btnExport.addEventListener('click', exportData);
+el.btnImport.addEventListener('click', importData);
 
-// keyboard (optional)
 window.addEventListener('keydown', (e)=>{
   if(e.key==='ArrowRight'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.75}); }
   else if(e.key==='ArrowLeft'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.25}); }
@@ -557,7 +633,6 @@ window.addEventListener('keydown', (e)=>{
 async function init(){
   startClock();
   try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
-  // sanitize and ensure IDs are strings
   deck = deck.map(card=>({ ...card, id: String(card.id), artist: cleanText(card.artist), title: cleanText(card.title), date: cleanText(card.date), style: cleanText(card.style) }));
   if(!deck.length){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
   ensureToday(); buildPlaylist(); showCurrent(true);
