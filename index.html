@@ -374,37 +374,52 @@ function autoAccentFromImage(img){
 function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm=h>=12?'PM':'AM'; h=h%12||12; return {h,m,ampm}; }
 function startClock(){ const tick=()=>{const d=new Date();const{h,m,ampm}=fmtTime(d);el.clock.textContent=`${h}:${m}`;el.ampm.textContent=ampm;}; tick(); setInterval(tick,15000); }
 
-// --- Keep screen awake (Wake Lock API) ---
+// --- Keep screen awake (Wake Lock API, robust on iOS) ---
 let wakeLock = null;
 
-async function requestWakeLock() {
+async function acquireWakeLock(reason = '') {
   try {
+    if (!('wakeLock' in navigator)) return;                   // unsupported browser
+    if (document.visibilityState !== 'visible') return;       // only while visible
+    if (wakeLock) return;                                     // already held
+
     wakeLock = await navigator.wakeLock.request('screen');
+    console.log('[wakeLock] acquired', reason);
+
+    // If the system drops it (LPM, policy, etc.), try again soon.
     wakeLock.addEventListener('release', () => {
-      console.log('[wakeLock] released by the system');
+      console.log('[wakeLock] released by system');
       wakeLock = null;
+      if (document.visibilityState === 'visible') {
+        setTimeout(() => acquireWakeLock('release'), 250);
+      }
     });
-    console.log('[wakeLock] acquired');
   } catch (err) {
     console.warn('[wakeLock] failed:', err.name, err.message);
   }
 }
 
-// Ask for wake lock on the first user gesture (required on iOS/Safari)
-function setupWakeLockOnce() {
-  const handler = () => {
-    if ('wakeLock' in navigator && !wakeLock) requestWakeLock();
-    window.removeEventListener('pointerdown', handler, { capture: true });
+function setupWakeLock() {
+  // First user gesture (required on iOS Safari)
+  const firstGesture = () => {
+    acquireWakeLock('first-gesture');
+    window.removeEventListener('pointerdown', firstGesture, true);
+    window.removeEventListener('touchstart', firstGesture, true);
+    window.removeEventListener('click', firstGesture, true);
   };
-  window.addEventListener('pointerdown', handler, { capture: true, once: true });
+  window.addEventListener('pointerdown', firstGesture, true);
+  window.addEventListener('touchstart', firstGesture, true);
+  window.addEventListener('click', firstGesture, true);
+
+  // Keep it alive / re-acquire on common state changes
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') acquireWakeLock('visibilitychange');
+  });
+  window.addEventListener('focus',       () => acquireWakeLock('focus'));
+  window.addEventListener('pageshow',    () => acquireWakeLock('pageshow'));
+  window.addEventListener('orientationchange', () => acquireWakeLock('orientationchange'));
 }
 
-// Re-acquire if the app becomes visible again
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && 'wakeLock' in navigator && !wakeLock) {
-    requestWakeLock();
-  }
-});
 
 // Be polite on leave
 window.addEventListener('pagehide', () => {
@@ -738,7 +753,7 @@ async function init(){
   deck=deck.map(card=>({...card,id:String(card.id||card.title),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
   if(!deck.length){ el.title.textContent='No deck.json found or empty.';return;}
   ensureToday(); buildPlaylist(); showCurrent(true);
-  setupWakeLockOnce();
+  setupWakeLock();
 }
 init();
 </script>
