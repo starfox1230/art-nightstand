@@ -738,6 +738,7 @@ async function init(){
   deck=deck.map(card=>({...card,id:String(card.id||card.title),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
   if(!deck.length){ el.title.textContent='No deck.json found or empty.';return;}
   ensureToday(); buildPlaylist(); showCurrent(true);
+  setupWakeLockOnce();
 }
 init();
 </script>
