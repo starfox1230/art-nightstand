@@ -44,13 +44,12 @@
   .stage{
     position:relative; z-index:1; display:grid; place-items:center;
     width:100%; height:100vh; padding:1rem;
-    /* FIX: Gradient moved here to fill the entire screen background */
-    background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%);
   }
   .frame{
     position:relative; width:100%; height:100%; max-width:1600px;
     aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
-    /* Gradient removed from here */
+    /* VISUAL TWEAK: Set a pure black background for the frame */
+    background-color: #000;
     box-shadow:var(--shadow);
     display:grid; grid-template-columns:34% 66%;
     user-select:none; /* avoid page-wide highlight when long-press */
@@ -107,7 +106,7 @@
   .btn:hover{ transform: translateY(-1px); }
   .btn.good{ border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent) inset; }
   .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
-  .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; outline:none; filter:none; } /* persistent, clean; no black rectangle */
+  .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; outline:none; filter:none; }
 
   /* Remove floating mark overlay */
   .mark{ display:none; }
@@ -207,7 +206,6 @@
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList" aria-label="Deck list"></div>
 
-      <!-- NEW: Import/Export Data -->
       <div class="row" style="justify-content:space-between; margin-top: 1rem;">
           <strong>Manage Data</strong>
       </div>
@@ -251,7 +249,6 @@ const el = {
   dailyCount: document.getElementById('dailyCount'),
   artArea: document.getElementById('artArea'), backdrop: document.getElementById('backdrop'),
   imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg'),
-  // NEW: Elements for import/export
   btnExport: document.getElementById('btnExport'),
   btnImport: document.getElementById('btnImport'),
   importFile: document.getElementById('importFile')
@@ -259,11 +256,11 @@ const el = {
 
 let cfg = loadConfig();
 let deck = [];
-let progress = loadState(); // id -> progress
-let playlist = [];          // today's selected cards
-let todaySel = loadToday(); // {date, ids:[]}
+let progress = loadState();
+let playlist = [];
+let todaySel = loadToday();
 let session = { index:0, phase:0, timers:[], today: dayISO(new Date()) };
-let suppressNextClick = false; // for long-press passthrough
+let suppressNextClick = false;
 
 function loadConfig(){ const raw=localStorage.getItem(CONFIG_KEY); return raw?{...DEFAULTS, ...JSON.parse(raw)}:{...DEFAULTS}; }
 function saveConfig(){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
@@ -277,7 +274,6 @@ function isHttp(url){ return /^https?:/i.test(url); }
 function clearTimers(){ session.timers.forEach(t=>clearTimeout(t)); session.timers=[]; }
 function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); session.timers=[t]; }
 
-/* ===== Sanitize text (decode entities, strip tags) ===== */
 function cleanText(val){
   if(val==null) return '';
   const tmp=document.createElement('div'); tmp.innerHTML=String(val);
@@ -354,13 +350,17 @@ function buildPlaylist(){
 }
 
 /* ===== Render ===== */
-function setMeta(artist, title, details){
-  el.artist.textContent=artist||''; el.title.textContent=title||''; el.details.textContent=details||'';
-}
-function hideMeta(){
-  for(const n of [el.artist, el.title, el.details]){
-    n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)';
-  }
+function hideMeta(){ [el.artist, el.title, el.details].forEach(n => { n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)'; }); }
+
+async function showCurrent(auto=true){
+  const card=playlist[session.index];
+  if(!card){ el.title.textContent = 'No deck.json found or empty.'; return; }
+  resetGradeFeedback(); const p = progress[card.id]; if (p && p.lastGrade) { showGradeFeedback(p.lastGrade); }
+  hideMeta();
+  await loadImageFor(card);
+  if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
+  if(auto){ runReveal(); }
+  updateChip();
 }
 
 function loadImageFor(card){
@@ -369,208 +369,158 @@ function loadImageFor(card){
   });
 }
 
-function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
-
-async function showCurrent(auto=true){
-  const card=playlist[session.index];
-  if(!card){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
-
-  // FIX: Reset grade buttons and show saved grade for this specific artwork
-  resetGradeFeedback();
-  const p = progress[card.id];
-  if (p && p.lastGrade) {
-    showGradeFeedback(p.lastGrade);
-  }
-
-  hideMeta(); setMeta('', '', '');
-  await loadImageFor(card);
-  if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
-  if(auto){ session.phase=0; runReveal(); }
-  updateChip();
-}
-
 function revealStep(){
   const card=playlist[session.index]; if(!card) return;
-  const artist=cleanText(card.artist); const title=cleanText(card.title);
-  const details=cleanText([card.date, card.style].filter(Boolean).join(' • '));
-  if(session.phase===0){ /* image only */ }
-  else if(session.phase===1){ el.artist.classList.add('reveal'); el.artist.removeAttribute('aria-hidden'); el.artist.textContent=artist; }
-  else if(session.phase===2){ el.title.classList.add('reveal'); el.title.removeAttribute('aria-hidden'); el.title.textContent=title; }
-  else if(session.phase===3){ el.details.classList.add('reveal'); el.details.removeAttribute('aria-hidden'); el.details.textContent=details; }
+  const map=[null, el.artist, el.title, el.details];
+  const node = map[session.phase]; if(!node) return;
+  const contentMap = { artist: card.artist, title: card.title, details: [card.date, card.style].filter(Boolean).join(' • ') };
+  node.textContent = cleanText(contentMap[node.id]);
+  node.classList.add('reveal'); node.removeAttribute('aria-hidden');
 }
 
-function runReveal(){
-  const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-  function scheduleNext(){
-    if(session.phase<3){
-      restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); });
-    } else {
-      restartTimer(plan[3]*1000, ()=>{ nextCard(); });
-    }
-  }
-  session.phase=0; revealStep(); scheduleNext();
-}
-
-function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
-
-// FIX: "Going back" logic updated for smoother transitions
-async function stepBackward(){
-  clearTimers();
-  if(session.phase > 0){
-    session.phase--;
-    hideStepVisualBeyond(session.phase);
-    const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-    function scheduleNext(){
-      if(session.phase<3){
-        restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); });
-      } else {
-        restartTimer(plan[3]*1000, ()=>{ nextCard(); });
-      }
+function runRevealFromCurrentPhase() {
+    const plan = [cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+    function scheduleNext() {
+        if (session.phase > 0) revealStep();
+        if (session.phase < 3) {
+            restartTimer(plan[session.phase] * 1000, () => {
+                session.phase++;
+                scheduleNext();
+            });
+        } else {
+            restartTimer(plan[3] * 1000, () => { nextCard(); });
+        }
     }
     scheduleNext();
-  } else {
-    // This part is fixed: it now correctly goes to the previous card
-    // and triggers the full, timed reveal sequence from the beginning.
-    session.index = (session.index-1+playlist.length)%playlist.length;
-    await showCurrent(true);
-  }
 }
 
-function hideStepVisualBeyond(phase){
-  const map=[ el.artist, el.title, el.details ];
-  for(let i=phase;i<3;i++){
-    const n = map[i]; if(!n) continue;
-    n.style.opacity=0; n.style.transform='translateY(8px)'; n.classList.remove('reveal');
-  }
+function runReveal(){ session.phase=0; runRevealFromCurrentPhase(); }
+function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
+
+// --- LOGIC CHANGE: Rewritten "stepBackward" functionality ---
+function hideStepVisual(phaseToHide) {
+    const map = [null, el.artist, el.title, el.details];
+    const node = map[phaseToHide];
+    if (node) { node.classList.remove('reveal'); node.setAttribute('aria-hidden', 'true'); }
 }
 
-// FIX: Functions to manage grade button state
+function showAllMeta() {
+    const card = playlist[session.index]; if (!card) return;
+    el.artist.textContent = cleanText(card.artist);
+    el.title.textContent = cleanText(card.title);
+    el.details.textContent = cleanText([card.date, card.style].filter(Boolean).join(' • '));
+    [el.artist, el.title, el.details].forEach(n => { n.classList.add('reveal'); n.removeAttribute('aria-hidden'); });
+}
+
+async function stepBackward() {
+    clearTimers();
+    const plan = [cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+
+    if (session.phase > 0) {
+        // Current artwork has info visible. Hide the top-most layer of info.
+        hideStepVisual(session.phase);
+        session.phase--;
+        restartTimer(plan[session.phase] * 1000, runRevealFromCurrentPhase);
+    } else {
+        // At image-only view. Go to the previous artwork and show it fully revealed.
+        session.index = (session.index - 1 + playlist.length) % playlist.length;
+        await showCurrent(false); // Load image, backdrop, reset buttons etc., but don't start auto-timer.
+
+        // Instantly show all info.
+        session.phase = 3;
+        showAllMeta();
+
+        // Start the timer for the final step (details), which will then lead to the next card.
+        restartTimer(plan[3] * 1000, () => { nextCard(); });
+    }
+}
+
+// --- End of logic change ---
+
 function showGradeFeedback(kind){
   if(kind==='good'){ el.btnGood.classList.add('selected'); el.btnBad.classList.remove('selected'); }
   else { el.btnBad.classList.add('selected'); el.btnGood.classList.remove('selected'); }
 }
-function resetGradeFeedback() {
-  el.btnGood.classList.remove('selected');
-  el.btnBad.classList.remove('selected');
-}
+function resetGradeFeedback() { el.btnGood.classList.remove('selected'); el.btnBad.classList.remove('selected'); }
+function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
 
 /* ===== Settings modal ===== */
 function openSettings(){
   const f=el.settingsForm;
-  f.dailyCount.value = cfg.dailyCount;
-  f.imageBase.value = cfg.imageBase;
-  f.tImage.value = cfg.tImage;
-  f.tArtist.value = cfg.tArtist;
-  f.tTitle.value = cfg.tTitle;
-  f.tDetails.value = cfg.tDetails;
-  f.autoAccent.value = cfg.autoAccent;
-  buildDeckListFresh();
-  el.settings.showModal();
-  setTimeout(()=>{ document.activeElement && document.activeElement.blur(); el.settings.focus({preventScroll:true}); }, 0);
+  f.dailyCount.value = cfg.dailyCount; f.imageBase.value = cfg.imageBase; f.tImage.value = cfg.tImage;
+  f.tArtist.value = cfg.tArtist; f.tTitle.value = cfg.tTitle; f.tDetails.value = cfg.tDetails;
+  f.autoAccent.value = cfg.autoAccent; buildDeckListFresh(); el.settings.showModal();
 }
 
 let tempSel = new Set();
 function buildDeckListFresh(){
-  const term=(el.search.value||'').toLowerCase();
-  tempSel = new Set(todaySel.ids);
-  el.deckList.innerHTML=''; let selectedCount = tempSel.size;
+  const term=(el.search.value||'').toLowerCase(); tempSel = new Set(todaySel.ids); el.deckList.innerHTML='';
+  let selectedCount = tempSel.size;
   const updateSelCount=()=>{ el.selCount.textContent = `${selectedCount}/${cfg.dailyCount}`; el.dailyCount.value = cfg.dailyCount; };
-
   for(const c of deck){
     const artist=cleanText(c.artist), title=cleanText(c.title);
     if(term && !(artist.toLowerCase().includes(term)||title.toLowerCase().includes(term))) continue;
     const row=document.createElement('div'); row.className='row'; row.dataset.id=c.id;
-
     const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=tempSel.has(c.id);
     const label=document.createElement('div'); label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
     const preview=document.createElement('button'); preview.className='btn'; preview.textContent='Image';
-
     cb.addEventListener('change',()=>{
-      if(cb.checked){
-        if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; }
+      if(cb.checked){ if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; }
         tempSel.add(c.id); selectedCount = tempSel.size; updateSelCount(); preview.disabled=false;
-      } else {
-        tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount();
-      }
+      } else { tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount(); }
     });
-
-    preview.addEventListener('click',(e)=>{
-      e.preventDefault();
+    preview.addEventListener('click',(e)=>{ e.preventDefault();
       const src = isHttp(c.image)? c.image : (cfg.imageBase||'./') + c.image;
       el.previewImg.src = src; el.imgPreview.classList.add('show');
     });
-
     row.appendChild(cb); row.appendChild(label); row.appendChild(preview);
     el.deckList.appendChild(row);
   }
   updateSelCount();
 }
 
-/* ===== NEW: Data Import/Export ===== */
+/* ===== Data Import/Export ===== */
 function exportData() {
-    const dataToExport = {
-        config: loadConfig(),
-        state: loadState()
-    };
+    const dataToExport = { config: loadConfig(), state: loadState() };
     const jsonString = JSON.stringify(dataToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const a = document.createElement('a'); a.href = url;
     a.download = `art_slideshow_progress_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
-
-function importData() {
-    el.importFile.click();
-}
-
+function importData() { el.importFile.click(); }
 el.importFile.addEventListener('change', (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
+    const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        try {
-            const data = JSON.parse(e.target.result);
+        try { const data = JSON.parse(e.target.result);
             if (data && data.config && data.state) {
                 localStorage.setItem(CONFIG_KEY, JSON.stringify(data.config));
                 localStorage.setItem(STATE_KEY, JSON.stringify(data.state));
-                localStorage.removeItem(TODAY_KEY); // Force playlist rebuild on reload
+                localStorage.removeItem(TODAY_KEY);
                 alert('Progress imported successfully! The page will now reload.');
                 location.reload();
-            } else {
-                alert('Invalid import file. Make sure it contains "config" and "state" data.');
-            }
-        } catch (error) {
-            alert('Error parsing file: ' + error.message);
-        }
-        event.target.value = ''; // Allow re-uploading the same file
+            } else { alert('Invalid import file.'); }
+        } catch (error) { alert('Error parsing file: ' + error.message); }
+        event.target.value = '';
     };
     reader.readAsText(file);
 });
 
 
 /* ===== Events ===== */
-el.imgPreview.addEventListener('click', ()=>{
-  el.imgPreview.classList.remove('show'); el.previewImg.src='';
-});
-
+el.imgPreview.addEventListener('click', ()=>{ el.imgPreview.classList.remove('show'); el.previewImg.src=''; });
 el.search.addEventListener('input', buildDeckListFresh);
-
 el.settingsForm.addEventListener('submit', (e)=>{
   const action = e.submitter && e.submitter.value;
   if(action==='save'){
     const f = el.settingsForm;
-    cfg.dailyCount = Math.max(1, Math.min(200, +f.dailyCount.value||cfg.dailyCount));
+    cfg.dailyCount = Math.max(1, +f.dailyCount.value||cfg.dailyCount);
     cfg.imageBase = f.imageBase.value.trim()||'./art/';
     cfg.tImage=+f.tImage.value||4; cfg.tArtist=+f.tArtist.value||3;
     cfg.tTitle=+f.tTitle.value||3; cfg.tDetails=+f.tDetails.value||4;
     cfg.autoAccent=f.autoAccent.value; saveConfig();
-
     todaySel.ids = Array.from(tempSel).slice(0, cfg.dailyCount);
     saveToday(); buildPlaylist(); showCurrent(true);
   }
@@ -579,17 +529,13 @@ el.settingsForm.addEventListener('submit', (e)=>{
 
 function onHitClick(e){
   if(suppressNextClick){ suppressNextClick=false; return; }
-  const rect = e.currentTarget.getBoundingClientRect();
-  const x = e.clientX - rect.left;
+  const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left;
   if(x < rect.width/2){ stepBackward(); }
   else {
     if(session.phase<3){
-      session.phase++; revealStep();
-      const d=[cfg.tArtist,cfg.tTitle,cfg.tDetails][session.phase-1];
-      restartTimer((+d||3)*1000, ()=>{
-        if(session.phase<3){ session.phase++; revealStep(); }
-        else { nextCard(); }
-      });
+      clearTimers();
+      session.phase++;
+      runRevealFromCurrentPhase();
     } else { nextCard(); }
   }
 }
@@ -599,14 +545,9 @@ function onTouchStart(e){
   const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY;
   const artRect = el.artArea.getBoundingClientRect();
   if(t.clientX<artRect.left || t.clientX>artRect.right || t.clientY<artRect.top || t.clientY>artRect.bottom){ return; }
-  lpTimer=setTimeout(()=>{
-    el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200);
-  }, LONG_PRESS_MS);
+  lpTimer=setTimeout(()=>{ el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200); }, LONG_PRESS_MS);
 }
-function onTouchMove(e){
-  if(!lpTimer) return; const t=e.touches[0];
-  if(Math.abs(t.clientX-touchStartX)>MOVE_TOL || Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; }
-}
+function onTouchMove(e){ if(!lpTimer) return; const t=e.touches[0]; if(Math.abs(t.clientX-touchStartX)>MOVE_TOL || Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; } }
 function onTouchEnd(){ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }
 
 el.hits.addEventListener('click', onHitClick);
@@ -634,7 +575,7 @@ async function init(){
   startClock();
   try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
   deck = deck.map(card=>({ ...card, id: String(card.id), artist: cleanText(card.artist), title: cleanText(card.title), date: cleanText(card.date), style: cleanText(card.style) }));
-  if(!deck.length){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
+  if(!deck.length){ el.title.textContent = 'No deck.json found or empty.'; return; }
   ensureToday(); buildPlaylist(); showCurrent(true);
 }
 init();
