@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<!-- iOS PWA fullscreen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Art Slideshow">
@@ -28,22 +27,20 @@
   }
   input, textarea, select { user-select:auto; -webkit-user-select:auto; }
 
-  /* === STAGE fills the real visual viewport (letterbox allowed) and is clickable === */
+  /* Fullscreen stage (letterboxing allowed) */
   .stage{
-    position:fixed; inset:0;              /* covers the whole screen */
-    width:100vw; height:100vh;            /* fallback */
-    height:100svh;                        /* modern iOS for correct initial size */
+    position:fixed; inset:0;
+    width:100vw; height:100vh;
+    height:100svh;
     display:grid; place-items:center;
-    z-index:0;                            /* UI sits above; clicks on empty areas hit .stage */
+    z-index:0;
   }
 
-  /* === 16:9 FRAME that always fully fits without being clipped ===
-       Fits by the limiting dimension; gives black corners on extra-wide phones. */
+  /* 16:9 frame always fully in view — never clipped */
   .frame{
     position:relative;
     width: min(100vw, calc(100svh * (16/9)));
     height:min(100svh, calc(100vw * (9/16)));
-    /* fallback if svh not supported */
     width: min(100vw, calc(100vh * (16/9)));
     height:min(100vh, calc(100vw * (9/16)));
     aspect-ratio:16/9;
@@ -85,28 +82,30 @@
   .reveal:nth-child(1){ animation-delay:0ms } .reveal:nth-child(2){ animation-delay:80ms } .reveal:nth-child(3){ animation-delay:120ms }
   @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
 
+  /* === FULL IMAGE, NO CROP === */
   .art{
+    grid-column:2;
+    position:relative;
     width:100%; height:100%;
-    display:grid; place-items:center; grid-column:2;
-    min-width:0; min-height:0;               /* important to prevent grid overflow cropping */
+    display:flex; align-items:center; justify-content:center; /* center the intrinsic box */
+    min-width:0; min-height:0; /* prevent grid overflow quirks */
   }
-  /* === Always show full artwork initially; never cropped === */
   .art img{
     display:block;
-    width:100%; height:100%;
-    max-width:100%; max-height:100%;
-    object-fit:contain; object-position:center center;
+    width:auto; height:auto;               /* keep intrinsic aspect ratio */
+    max-width:100%; max-height:100%;       /* scale down to fit the cell */
+    object-fit:contain; object-position:center center; /* belt + suspenders */
     filter: drop-shadow(0 20px 40px rgba(0,0,0,.35));
-    pointer-events:none;                     /* image itself doesn't eat taps */
+    pointer-events:none;                   /* let overlay receive taps */
   }
 
   .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
 
-  /* In-frame hit zones (still useful) */
+  /* In-frame hit zones overlay (for clicks) */
   .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index:3; }
   .hit{ cursor:pointer; }
 
-  /* Footer floats above but does not block general taps */
+  /* Footer UI */
   .footer{
     position:absolute; left:0; right:0; bottom:0;
     display:flex; justify-content:space-between; align-items:center; gap:.6rem;
@@ -216,7 +215,6 @@
   <div class="lightbox" id="mainLightbox"><img id="mainLightboxImg" alt="Full artwork view"></div>
 
 <script>
-/* ===== unchanged data/config/state scaffolding ===== */
 const CONFIG_KEY = 'artSRS_config_v7';
 const STATE_KEY  = 'artSRS_state_v6';
 const TODAY_KEY  = 'artSRS_today_v3';
@@ -227,6 +225,7 @@ const DEFAULTS = {
 
 const el = {
   stage: document.getElementById('stage'),
+  frame: document.getElementById('frame'),
   frameBackdrop: document.getElementById('frameBackdrop'),
   img: document.getElementById('artImg'),
   clock: document.getElementById('clock'), ampm: document.getElementById('ampm'),
@@ -332,7 +331,11 @@ async function showCurrent(auto=true){
   resetGradeFeedback(); const p=progress[card.id]; if(p&&p.lastGrade) showGradeFeedback(p.lastGrade);
   hideMeta();
   await loadImageFor(card);
-  /* ensure uncropped view every time */
+  /* force full, uncropped view */
+  el.img.style.width = 'auto';
+  el.img.style.height = 'auto';
+  el.img.style.maxWidth = '100%';
+  el.img.style.maxHeight = '100%';
   el.img.style.objectFit = 'contain';
   el.img.style.objectPosition = 'center center';
   if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
@@ -453,64 +456,90 @@ el.importFile.addEventListener('change',(event)=>{
   reader.readAsText(file);
 });
 
-el.settingsForm.addEventListener('submit',(e)=>{
-  const action=e.submitter&&e.submitter.value;
-  if(action==='save'){
-    const f=el.settingsForm;
-    cfg.newCount = Math.max(0, +f.newCount.value || cfg.newCount);
-    cfg.maxReviews = Math.max(0, +f.maxReviews.value || cfg.maxReviews);
-    cfg.imageBase=f.imageBase.value.trim()||'./art/';
-    cfg.tImage=+f.tImage.value||4; cfg.tArtist=+f.tArtist.value||3; cfg.tTitle=+f.tTitle.value||3; cfg.tDetails=+f.tDetails.value||4;
-    cfg.autoAccent=f.autoAccent.value;
-    saveConfig();
-    todaySel.ids = Array.from(tempSel); saveToday();
-    buildPlaylist(); showCurrent(true);
-  }
-  e.preventDefault(); el.settings.close();
-});
+/* === NAVIGATION: clicks + touch taps === */
+let lastTouchNavAt = 0;
 
 function onHitClick(e){
-  if(isLongPressOpeningLightbox) return;
-  const rect=e.currentTarget.getBoundingClientRect();
-  const x=e.clientX-rect.left;
-  if(x<rect.width/2){ stepBackward(); } else { revealNextStepOrCard(); }
+  // Avoid double-fire if a touch just triggered nav
+  if (Date.now() - lastTouchNavAt < 280) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  if (x < rect.width/2){ stepBackward(); } else { revealNextStepOrCard(); }
 }
 
-/* Long-press to open lightbox (unchanged) */
-let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=1000; const MOVE_TOL=12;
+/* Long-press to open lightbox + short-tap navigation on touch devices */
+let lpTimer=null, touchStartX=0, touchStartY=0, touchStartTime=0, lastTouchX=0, lastTouchY=0;
+const LONG_PRESS_MS=1000, MOVE_TOL=12;
+
 function onTouchStart(e){
-  const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY;
-  const artRect=el.artArea.getBoundingClientRect();
-  if(t.clientX<artRect.left||t.clientX>artRect.right||t.clientY<artRect.top||t.clientY>artRect.bottom) return;
-  pauseTimer();
-  lpTimer=setTimeout(()=>{
-    isLongPressOpeningLightbox = true;
-    const card = playlist[session.index]; if(!card) return;
-    const src = card.image.startsWith('http') ? card.image : (cfg.imageBase||'./') + card.image;
-    el.mainLightboxImg.src = src; el.mainLightbox.classList.add('show');
-  }, LONG_PRESS_MS);
-}
-function onTouchMove(e){
-  if(!lpTimer) return;
   const t=e.touches[0];
-  if(Math.abs(t.clientX-touchStartX)>MOVE_TOL||Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; resumeTimer(); }
-}
-function onTouchEnd(){ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; resumeTimer(); } }
+  touchStartX = lastTouchX = t.clientX;
+  touchStartY = lastTouchY = t.clientY;
+  touchStartTime = Date.now();
 
-/* === NEW: Let LEFT/RIGHT clicks anywhere in the black letterbox areas navigate === */
+  // Long-press only if starting inside the image area
+  const artRect = el.artArea.getBoundingClientRect();
+  if (t.clientX>=artRect.left && t.clientX<=artRect.right && t.clientY>=artRect.top && t.clientY<=artRect.bottom){
+    pauseTimer();
+    lpTimer = setTimeout(()=>{
+      isLongPressOpeningLightbox = true;
+      const card = playlist[session.index]; if(!card) return;
+      const src = card.image.startsWith('http') ? card.image : (cfg.imageBase||'./') + card.image;
+      el.mainLightboxImg.src = src; el.mainLightbox.classList.add('show');
+    }, LONG_PRESS_MS);
+  }
+}
+
+function onTouchMove(e){
+  const t=e.touches[0];
+  lastTouchX = t.clientX; lastTouchY = t.clientY;
+  if(!lpTimer) return;
+  if(Math.abs(lastTouchX-touchStartX)>MOVE_TOL || Math.abs(lastTouchY-touchStartY)>MOVE_TOL){
+    clearTimeout(lpTimer); lpTimer=null; resumeTimer();
+  }
+}
+
+function onTouchEnd(e){
+  const duration = Date.now() - touchStartTime;
+  const dx = Math.abs((lastTouchX||touchStartX) - touchStartX);
+  const dy = Math.abs((lastTouchY||touchStartY) - touchStartY);
+
+  // Cancel pending long-press timer
+  if (lpTimer){ clearTimeout(lpTimer); lpTimer=null; resumeTimer(); }
+
+  // If long-press opened lightbox, do nothing on release
+  if (isLongPressOpeningLightbox){
+    // reset shortly so next taps work
+    setTimeout(()=>{ isLongPressOpeningLightbox = false; }, 100);
+    return;
+  }
+
+  // Treat as a TAP if it was short and without movement
+  if (duration < LONG_PRESS_MS && dx < MOVE_TOL && dy < MOVE_TOL){
+    const rect = el.frame.getBoundingClientRect();
+    const x = (e.changedTouches[0] ? e.changedTouches[0].clientX : touchStartX) - rect.left;
+    lastTouchNavAt = Date.now();
+    // Prevent the subsequent synthetic click
+    if (e.cancelable) e.preventDefault();
+    if (x < rect.width/2){ stepBackward(); } else { revealNextStepOrCard(); }
+  }
+}
+
+el.hits.addEventListener('click', onHitClick);
+el.hits.addEventListener('touchstart', onTouchStart, {passive:false});
+el.hits.addEventListener('touchmove',  onTouchMove,  {passive:false});
+el.hits.addEventListener('touchend',   onTouchEnd,   {passive:false});
+el.hits.addEventListener('touchcancel',onTouchEnd,   {passive:false});
+
+/* Let the black letterbox outside the frame also navigate */
 function onStageClick(e){
-  if(e.target !== el.stage) return;    // ignore clicks on UI or the frame
+  if(e.target !== el.stage) return;
   const x = e.clientX;
   if(x < window.innerWidth/2){ stepBackward(); } else { revealNextStepOrCard(); }
 }
+el.stage.addEventListener('click', onStageClick);
 
-el.hits.addEventListener('click',onHitClick);
-el.hits.addEventListener('touchstart',onTouchStart,{passive:true});
-el.hits.addEventListener('touchmove',onTouchMove,{passive:true});
-el.hits.addEventListener('touchend',onTouchEnd,{passive:true});
-el.hits.addEventListener('touchcancel',onTouchEnd,{passive:true});
 el.artArea.addEventListener('contextmenu', (e) => e.preventDefault());
-
 el.mainLightboxImg.addEventListener('contextmenu', (e) => {
   if(isLongPressOpeningLightbox){ e.preventDefault(); setTimeout(() => { isLongPressOpeningLightbox = false; }, 100); }
 });
@@ -518,10 +547,9 @@ el.mainLightbox.addEventListener('click', (e) => {
   if(e.target === el.mainLightbox){ el.mainLightbox.classList.remove('show'); resumeTimer(); }
 });
 
-el.stage.addEventListener('click', onStageClick);
-
 el.btnGood.addEventListener('click',()=>{ if(!playlist.length) return; grade(playlist[session.index],'good'); });
 el.btnBad.addEventListener('click',()=>{ if(!playlist.length) return; grade(playlist[session.index],'bad'); });
+
 el.btnSettings.addEventListener('click',()=>{ openSettings(); });
 el.btnExport.addEventListener('click',exportData);
 el.btnImport.addEventListener('click',importData);
@@ -536,9 +564,6 @@ window.addEventListener('keydown',(e)=>{
   else if(e.key.toLowerCase()==='b'){ if(playlist.length) grade(playlist[session.index],'bad'); }
   else if(e.key.toLowerCase()==='s'){ openSettings(); }
 });
-
-/* ensure stage keeps correct size after rotations/UI bar changes */
-window.addEventListener('orientationchange', ()=>{ /* CSS handles it; no-op keeps layout stable */ });
 
 async function init(){
   startClock();
