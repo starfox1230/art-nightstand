@@ -1,107 +1,148 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Art Nightstand Slideshow</title>
-  <style>
-    :root{
-      --bg:#0b0b0f;           /* deep night */
-      --fg:#e9e9ef;           /* text */
-      --muted:#9aa0a6;        /* secondary text */
-      --accent:#6ee7ff;       /* auto-tint from artwork */
-      --surface:#121218;      /* cards */
-      --btn:#1e1e27;
-      --good:#2bd576;
-      --bad:#ff6b6b;
-      --shadow:0 10px 30px rgba(0,0,0,.35);
-      --radius:18px;
-      --step-fade: 450ms;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{ margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; display:flex; min-height:100vh; }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Art Nightstand Slideshow</title>
+<style>
+  :root{
+    --bg:#0b0b0f;           /* deep night */
+    --fg:#e9e9ef;           /* base text */
+    --muted:#9aa0a6;        /* secondary text */
+    --accent:#6ee7ff;       /* auto-tint from artwork */
+    --surface:#121218;      /* cards */
+    --btn:#1e1e27;
+    --good:#2bd576;
+    --bad:#ff6b6b;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:18px;
+    --step-fade:450ms;
 
-    /* Ambient backdrop that extends artwork to screen edges */
-    .backdrop{ position:fixed; inset:0; z-index:-1; background:var(--bg); }
-    .backdrop::before{ content:""; position:absolute; inset:0; background-size:cover; background-position:center; filter: blur(40px) brightness(.35) saturate(.9); transform:scale(1.1); will-change:transform; }
-    .backdrop::after{ content:""; position:absolute; inset:0; background: radial-gradient(55% 45% at 60% 55%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%); pointer-events:none; }
+    /* Readability tweaks */
+    --accent-text: color-mix(in srgb, var(--accent) 70%, white 30%); /* lighter than accent */
+    --title-fg:    color-mix(in srgb, var(--fg) 85%, var(--muted) 15%); /* soften white a bit */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--fg);
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+    background:var(--bg);
+    -webkit-tap-highlight-color: transparent;
+  }
 
-    /* Stage centers a 16:9 frame, works in both orientations */
-    .stage{ position:relative; display:grid; place-items:center; width:100%; height:100vh; padding:1rem; }
-    .frame{ position:relative; width:100%; height:100%; max-width:1600px; aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden; background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%); box-shadow: var(--shadow); display:grid; grid-template-columns: 34% 66%; user-select:none; }
+  /* Full-viewport ambient backdrop (blurred current artwork) */
+  .backdrop{
+    position:fixed; inset:0; z-index:0;
+    background-position:center; background-size:cover;
+    filter: blur(40px) brightness(.35) saturate(.9);
+    transform: scale(1.12);
+    pointer-events:none;
+  }
 
-    /* Left column: clock + meta */
-    .side{ display:flex; flex-direction:column; justify-content:flex-start; padding:1.2rem; gap:1rem; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0) 40%); grid-column:1; pointer-events:none; }
-    .clockWrap{ display:flex; flex-direction:column; align-items:flex-start; gap:.2rem; }
-    .clock{ font-variant-numeric:tabular-nums; font-weight:800; line-height:1; letter-spacing:.5px; color:var(--accent); text-shadow:0 0 24px color-mix(in srgb, var(--accent) 40%, transparent); }
-    .clock .ampm{ font-weight:600; color: color-mix(in srgb, var(--accent) 75%, white 10%); opacity:.9; margin-left:.25em; }
+  /* Stage centers a 16:9 frame; backdrop shows around it */
+  .stage{ position:relative; z-index:1; display:grid; place-items:center; width:100%; height:100vh; padding:1rem; }
+  .frame{
+    position:relative; width:100%; height:100%; max-width:1600px;
+    aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
+    background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%);
+    box-shadow:var(--shadow);
+    display:grid; grid-template-columns:34% 66%;
+    user-select:none; /* avoid page-wide highlight when long-press */
+  }
 
-    .meta{ display:flex; flex-direction:column; gap:.35rem; max-width: 95%; }
-    .kicker{ color:var(--accent); text-transform:uppercase; letter-spacing:.18em; font-weight:700; font-size:1rem; opacity:0; transform: translateY(8px); }
-    .title{ font-size: clamp(1.2rem, 3.6vw, 2.2rem); font-weight:800; letter-spacing:.2px; line-height:1.1; opacity:0; transform: translateY(8px); }
-    .sub{ color:var(--muted); font-size: clamp(.95rem, 2.2vw, 1.05rem); opacity:0; transform: translateY(8px); }
+  /* Left column: clock + meta */
+  .side{
+    display:flex; flex-direction:column; justify-content:flex-start;
+    padding:1.2rem; gap:1rem;
+    background:linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,0) 42%);
+    grid-column:1; pointer-events:none;
+  }
+  .clockWrap{ display:flex; flex-direction:column; align-items:flex-start; gap:.2rem; }
+  .clock{
+    font-variant-numeric:tabular-nums; font-weight:800; line-height:1; letter-spacing:.5px;
+    color:var(--accent-text);
+    text-shadow:0 0 24px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .clock .ampm{ font-weight:600; color: color-mix(in srgb, var(--accent) 80%, white 12%); opacity:.95; margin-left:.25em; }
 
-    .reveal{ animation: fadeUp var(--step-fade) ease forwards; }
-    .reveal:nth-child(1){ animation-delay:0ms }
-    .reveal:nth-child(2){ animation-delay:80ms }
-    .reveal:nth-child(3){ animation-delay:120ms }
-    @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
+  .meta{ display:flex; flex-direction:column; gap:.35rem; max-width:95%; }
+  .kicker{ color:var(--accent-text); text-transform:uppercase; letter-spacing:.18em; font-weight:700; font-size:1rem; opacity:0; transform:translateY(8px); }
+  .title{ color:var(--title-fg); font-size:clamp(1.2rem, 3.6vw, 2.2rem); font-weight:800; letter-spacing:.2px; line-height:1.1; opacity:0; transform:translateY(8px); }
+  .sub{ color:var(--muted); font-size:clamp(.95rem, 2.2vw, 1.05rem); opacity:0; transform:translateY(8px); }
+  .reveal{ animation: fadeUp var(--step-fade) ease forwards; }
+  .reveal:nth-child(1){ animation-delay:0ms }
+  .reveal:nth-child(2){ animation-delay:80ms }
+  .reveal:nth-child(3){ animation-delay:120ms }
+  @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
 
-    /* Right column: artwork */
-    .art{ position:relative; width:100%; height:100%; display:grid; place-items:center; grid-column:2; }
-    .art img{ max-width:100%; max-height:100%; object-fit:contain; filter: drop-shadow(0 20px 40px rgba(0,0,0,.35)); }
-    .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
+  /* Right column: artwork */
+  .art{ position:relative; width:100%; height:100%; display:grid; place-items:center; grid-column:2; }
+  .art img{ max-width:100%; max-height:100%; object-fit:contain; filter: drop-shadow(0 20px 40px rgba(0,0,0,.35)); -webkit-touch-callout: default; }
+  .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
 
-    /* Hit areas: exact 50/50 split across the frame */
-    .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index:3; }
-    .hit{ cursor:pointer; }
+  /* Exact 50/50 hit areas across the whole frame */
+  .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index:3; }
+  .hit{ cursor:pointer; }
 
-    /* Footer: left cluster (grade + settings), progress chip on right */
-    .footer{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.8rem 1rem; z-index:5; }
-    .leftGroup{ display:flex; gap:.6rem; align-items:center; }
-    .btn{ background:var(--btn); color:var(--fg); border:1px solid rgba(255,255,255,.08); padding:.8rem 1.1rem; border-radius:14px; cursor:pointer; user-select:none; transition: transform .06s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease; overflow:hidden; }
-    .btn:hover{ transform: translateY(-1px); }
-    .btn.good{ border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent) inset; }
-    .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
-    .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; } /* remove outline/drop-shadow to avoid black rectangle */
+  /* Footer: left cluster (grade + settings), progress chip on right */
+  .footer{
+    position:absolute; left:0; right:0; bottom:0;
+    display:flex; justify-content:space-between; align-items:center; gap:.6rem;
+    padding:.8rem 1rem; z-index:5;
+  }
+  .leftGroup{ display:flex; gap:.6rem; align-items:center; }
+  .btn{
+    background:var(--btn); color:var(--fg);
+    border:1px solid rgba(255,255,255,.08);
+    padding:.8rem 1.1rem; border-radius:14px; cursor:pointer; user-select:none;
+    transition: transform .06s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+    overflow:hidden;
+  }
+  .btn:hover{ transform: translateY(-1px); }
+  .btn.good{ border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent) inset; }
+  .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
+  .btn.selected{ box-shadow: 0 0 0 2px currentColor inset; outline:none; filter:none; } /* persistent, clean; no black rectangle */
 
-    /* Persistent grade mark over the image */
-    .mark{ position:absolute; right:1rem; bottom:1rem; font-size:2rem; opacity:.85; z-index:6; pointer-events:none; text-shadow:0 0 20px rgba(0,0,0,.45); }
+  /* Remove floating mark overlay */
+  .mark{ display:none; }
 
-    /* Progress chip */
-    .chip{ position:absolute; top:.6rem; right:.6rem; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:.25rem .6rem; color:var(--muted); font-size:.9rem; z-index:6; }
+  /* Progress chip */
+  .chip{ position:absolute; top:.6rem; right:.6rem; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:.25rem .6rem; color:var(--muted); font-size:.9rem; z-index:6; }
 
-    /* Settings modal */
-    dialog{ border:none; border-radius:16px; background:var(--surface); color:var(--fg); width:min(900px, 95vw); box-shadow: var(--shadow); }
-    dialog::backdrop{ background:rgba(0,0,0,.6); backdrop-filter: blur(3px); }
-    .modal{ padding:1rem; display:grid; gap:1rem; }
-    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
-    .grid3{ display:grid; grid-template-columns:repeat(4, 1fr); gap:.8rem; }
-    .field label{ display:block; font-size:.9rem; color:var(--muted); margin-bottom:.25rem; }
-    .field input[type="number"], .field input[type="text"], .field select{ width:100%; background:#0f0f15; border:1px solid rgba(255,255,255,.1); color:var(--fg); padding:.55rem .6rem; border-radius:10px; }
-    .list{ max-height:45vh; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
-    .row{ display:grid; grid-template-columns:auto 1fr auto; gap:.6rem; align-items:center; padding:.5rem .6rem; border-bottom:1px solid rgba(255,255,255,.06); }
-    .row:last-child{ border-bottom:none; }
-    .row small{ color:var(--muted); }
-    .pill{ padding:.25rem .6rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--muted); }
-    .actions{ display:flex; gap:.6rem; justify-content:flex-end; }
+  /* Settings modal */
+  dialog{ border:none; border-radius:16px; background:var(--surface); color:var(--fg); width:min(900px, 95vw); box-shadow: var(--shadow); }
+  dialog::backdrop{ background:rgba(0,0,0,.6); backdrop-filter: blur(3px); }
+  .modal{ padding:1rem; display:grid; gap:1rem; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
+  .grid3{ display:grid; grid-template-columns:repeat(4, 1fr); gap:.8rem; }
+  .field label{ display:block; font-size:.9rem; color:var(--muted); margin-bottom:.25rem; }
+  .field input[type="number"], .field input[type="text"], .field select{
+    width:100%; background:#0f0f15; border:1px solid rgba(255,255,255,.1); color:var(--fg); padding:.55rem .6rem; border-radius:10px;
+  }
+  .list{ max-height:45vh; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+  .row{ display:grid; grid-template-columns:auto 1fr auto; gap:.6rem; align-items:center; padding:.5rem .6rem; border-bottom:1px solid rgba(255,255,255,.06); }
+  .row:last-child{ border-bottom:none; }
+  .row small{ color:var(--muted); }
+  .pill{ padding:.25rem .6rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--muted); }
+  .actions{ display:flex; gap:.6rem; justify-content:flex-end; }
 
-    /* Image preview overlay in settings */
-    .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:9999; }
-    .lightbox.show{ display:flex; }
-    .lightbox img{ max-width:90vw; max-height:80vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); }
+  /* Image preview overlay in settings */
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:9999; }
+  .lightbox.show{ display:flex; }
+  .lightbox img{ max-width:90vw; max-height:80vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); }
 
-    /* Responsive clock sizes */
-    @media (orientation: landscape){ .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); } }
-    @media (orientation: portrait){ .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); } }
-  </style>
+  /* Responsive clock sizes */
+  @media (orientation: landscape){ .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); } }
+  @media (orientation: portrait){ .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); } }
+</style>
 </head>
 <body>
   <div class="backdrop" id="backdrop"></div>
+
   <main class="stage">
     <section class="frame" id="frame">
-      <!-- Left panel: ONLY instance of clock + meta -->
+      <!-- Left panel: clock + meta -->
       <aside class="side" id="side">
         <div class="clockWrap">
           <div class="clock" id="clock">--:--<span class="ampm" id="ampm"></span></div>
@@ -117,7 +158,6 @@
       <div class="art" id="artArea">
         <div class="tint" id="tint"></div>
         <img id="artImg" alt="Artwork" />
-        <div class="mark" id="mark">&nbsp;</div>
       </div>
 
       <!-- Tap hit areas spanning the whole frame -->
@@ -126,7 +166,7 @@
         <div class="hit" id="hitRight" aria-label="Forward"></div>
       </div>
 
-      <!-- Footer & feedback -->
+      <!-- Footer -->
       <div class="footer">
         <div class="leftGroup">
           <button id="btnBad" class="btn bad">Not yet</button>
@@ -155,12 +195,14 @@
       <div class="field"><label>Auto accent</label>
         <select name="autoAccent"><option value="on">On</option><option value="off">Off</option></select>
       </div>
+
       <div class="row" style="justify-content:space-between">
         <strong>Today's repertoire</strong>
         <span class="pill" id="selCount">0/5</span>
       </div>
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList" aria-label="Deck list"></div>
+
       <div class="actions">
         <button class="btn" value="cancel">Close</button>
         <button class="btn good" value="save">Save</button>
@@ -171,213 +213,356 @@
   <!-- Lightbox for image preview within settings -->
   <div class="lightbox" id="imgPreview"><img alt="Preview" id="previewImg"></div>
 
-  <script>
-    /* ===== Config & State ===== */
-    const CONFIG_KEY = 'artSRS_config_v5';
-    const STATE_KEY  = 'artSRS_state_v5';
-    const TODAY_KEY  = 'artSRS_today_v2';
-    const DEFAULTS = { dailyCount:5, tImage:4, tArtist:3, tTitle:3, tDetails:4, imageBase:'./art/', autoAccent:'on', easeDefault:2.5 };
+<script>
+/* ===== Config & State ===== */
+const CONFIG_KEY = 'artSRS_config_v6';
+const STATE_KEY  = 'artSRS_state_v6';
+const TODAY_KEY  = 'artSRS_today_v3';
+const DEFAULTS = {
+  dailyCount:5, tImage:4, tArtist:3, tTitle:3, tDetails:4,
+  imageBase:'./art/', autoAccent:'on', easeDefault:2.5
+};
 
-    const el = {
-      frame: document.getElementById('frame'),
-      img: document.getElementById('artImg'),
-      tint: document.getElementById('tint'),
-      clock: document.getElementById('clock'), ampm: document.getElementById('ampm'),
-      artist: document.getElementById('artist'), title: document.getElementById('title'), details: document.getElementById('details'),
-      hitL: document.getElementById('hitLeft'), hitR: document.getElementById('hitRight'), hits: document.getElementById('hits'),
-      btnGood: document.getElementById('btnGood'), btnBad: document.getElementById('btnBad'), btnSettings: document.getElementById('btnSettings'),
-      mark: document.getElementById('mark'), chip: document.getElementById('chip'),
-      settings: document.getElementById('settings'), settingsForm: document.getElementById('settingsForm'),
-      deckList: document.getElementById('deckList'), selCount: document.getElementById('selCount'), search: document.getElementById('search'),
-      dailyCount: document.getElementById('dailyCount'),
-      artArea: document.getElementById('artArea'), backdrop: document.getElementById('backdrop'),
-      imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg')
-    };
+const el = {
+  frame: document.getElementById('frame'),
+  img: document.getElementById('artImg'),
+  tint: document.getElementById('tint'),
+  clock: document.getElementById('clock'), ampm: document.getElementById('ampm'),
+  artist: document.getElementById('artist'), title: document.getElementById('title'), details: document.getElementById('details'),
+  hits: document.getElementById('hits'),
+  btnGood: document.getElementById('btnGood'), btnBad: document.getElementById('btnBad'), btnSettings: document.getElementById('btnSettings'),
+  chip: document.getElementById('chip'),
+  settings: document.getElementById('settings'), settingsForm: document.getElementById('settingsForm'),
+  deckList: document.getElementById('deckList'), selCount: document.getElementById('selCount'), search: document.getElementById('search'),
+  dailyCount: document.getElementById('dailyCount'),
+  artArea: document.getElementById('artArea'), backdrop: document.getElementById('backdrop'),
+  imgPreview: document.getElementById('imgPreview'), previewImg: document.getElementById('previewImg')
+};
 
-    let cfg = loadConfig();
-    let deck = [];
-    let progress = loadState(); // id -> progress
-    let playlist = []; // today's selected cards
-    let todaySel = loadToday(); // {date, ids:[]}
-    let session = { index:0, phase:0, timers:[], today: dayISO(new Date()) };
-    let suppressNextClick = false; // for long-press
+let cfg = loadConfig();
+let deck = [];
+let progress = loadState(); // id -> progress
+let playlist = [];          // today's selected cards
+let todaySel = loadToday(); // {date, ids:[]}
+let session = { index:0, phase:0, timers:[], today: dayISO(new Date()) };
+let suppressNextClick = false; // for long-press passthrough
 
-    function loadConfig(){ const raw=localStorage.getItem(CONFIG_KEY); return raw?{...DEFAULTS, ...JSON.parse(raw)}:{...DEFAULTS}; }
-    function saveConfig(){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
-    function loadState(){ const raw=localStorage.getItem(STATE_KEY); return raw?JSON.parse(raw):{}; }
-    function saveState(){ localStorage.setItem(STATE_KEY, JSON.stringify(progress)); }
-    function loadToday(){ const raw=localStorage.getItem(TODAY_KEY); return raw?JSON.parse(raw):{date: dayISO(new Date()), ids: []}; }
-    function saveToday(){ localStorage.setItem(TODAY_KEY, JSON.stringify(todaySel)); }
+function loadConfig(){ const raw=localStorage.getItem(CONFIG_KEY); return raw?{...DEFAULTS, ...JSON.parse(raw)}:{...DEFAULTS}; }
+function saveConfig(){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
+function loadState(){ const raw=localStorage.getItem(STATE_KEY); return raw?JSON.parse(raw):{}; }
+function saveState(){ localStorage.setItem(STATE_KEY, JSON.stringify(progress)); }
+function loadToday(){ const raw=localStorage.getItem(TODAY_KEY); return raw?JSON.parse(raw):{date: dayISO(new Date()), ids: []}; }
+function saveToday(){ localStorage.setItem(TODAY_KEY, JSON.stringify(todaySel)); }
 
-    function dayISO(d){ const z= new Date(d.getFullYear(), d.getMonth(), d.getDate()); return z.toISOString().slice(0,10); }
-    function isHttp(url){ return /^https?:/i.test(url); }
-    function clearTimers(){ session.timers.forEach(t=>clearTimeout(t)); session.timers=[]; }
-    function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); session.timers=[t]; }
+function dayISO(d){ const z=new Date(d.getFullYear(), d.getMonth(), d.getDate()); return z.toISOString().slice(0,10); }
+function isHttp(url){ return /^https?:/i.test(url); }
+function clearTimers(){ session.timers.forEach(t=>clearTimeout(t)); session.timers=[]; }
+function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); session.timers=[t]; }
 
-    /* ===== Deck sanitation (strip tags & decode entities) ===== */
-    function cleanText(val){ if(val==null) return ''; const s=String(val); const tmp=document.createElement('div'); tmp.innerHTML=s; // decodes &amp; and strips tags
-      const text=tmp.textContent||tmp.innerText||''; return text.split(/\s+/).join(' ').trim(); }
+/* ===== Sanitize text (decode entities, strip tags) ===== */
+function cleanText(val){
+  if(val==null) return '';
+  const tmp=document.createElement('div'); tmp.innerHTML=String(val);
+  const text=tmp.textContent||tmp.innerText||'';
+  return text.split(/\s+/).join(' ').trim();
+}
 
-    function ensureProgress(card){ if(!progress[card.id]) progress[card.id]={ ease: cfg.easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0, lastGrade:null }; return progress[card.id]; }
+/* ===== SRS Progress ===== */
+function ensureProgress(card){
+  if(!progress[card.id])
+    progress[card.id] = { ease: cfg.easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0, lastGrade:null };
+  return progress[card.id];
+}
 
-    function grade(card, kind){ const p=ensureProgress(card); if(kind==='good'){ if(p.state==='new'){ p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); } else if(p.state==='learning'){ if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); } else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); } } else { const next=Math.round(Math.max(1, p.intervalDays * p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); } p.reps++; }
-      else { p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
-      p.lastGrade = kind; saveState();
-      showGradeFeedback(kind);
-      updateChip(); }
+function grade(card, kind){
+  const p=ensureProgress(card);
+  if(kind==='good'){
+    if(p.state==='new'){ p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
+    else if(p.state==='learning'){
+      if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); }
+      else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); }
+    } else { const next=Math.round(Math.max(1, p.intervalDays * p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); }
+    p.reps++;
+  } else {
+    p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000));
+  }
+  p.lastGrade = kind; saveState(); showGradeFeedback(kind); updateChip();
+}
 
-    /* ===== Accent from image & backdrop ===== */
-    function autoAccentFromImage(img){ try{ const canvas=document.createElement('canvas'); const ctx=canvas.getContext('2d',{willReadFrequently:true}); const w=canvas.width=80, h=canvas.height=80; ctx.drawImage(img,0,0,w,h); const data=ctx.getImageData(0,0,w,h).data; let r=0,g=0,b=0,c=0; for(let i=0;i<data.length;i+=4){ const a=data[i+3]; if(a<30) continue; r+=data[i]; g+=data[i+1]; b+=data[i+2]; c++; } if(c){ r=Math.round(r/c); g=Math.round(g/c); b=Math.round(b/c); const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent', accent); } }catch(e){}
-      // also update the blurred backdrop image
-      const url = img.currentSrc || img.src; el.backdrop.style.setProperty('--bgimg', `url('${url}')`);
-      el.backdrop.style.background = 'transparent'; // reset base
-      el.backdrop.style.setProperty('--accent', getComputedStyle(document.documentElement).getPropertyValue('--accent'));
-      el.backdrop.style.position = 'fixed';
-      el.backdrop.style.zIndex = -1;
-      el.backdrop.style.pointerEvents='none';
-      el.backdrop.style.filter='none';
-      el.backdrop.style.opacity='1';
-      el.backdrop.querySelector?.('::before');
-      // use inline style for ::before via CSS variable
-      const before = document.styleSheets[0];
-      try{ document.querySelector(':root'); }catch(e){}
-      // set bg on pseudo via direct style: we can't; so set via data-url attr and use attribute selector? Simpler: set style on ::before using element style isn't possible; instead, set backdrop's backgroundImage directly
-      el.backdrop.style.backgroundImage = `url('${url}')`;
-      el.backdrop.style.backgroundSize = 'cover';
-      el.backdrop.style.backgroundPosition = 'center';
-      el.backdrop.style.filter = 'blur(40px) brightness(.35) saturate(.9)';
-      el.backdrop.style.transform = 'scale(1.1)';
+/* ===== Accent & Backdrop ===== */
+function autoAccentFromImage(img){
+  try{
+    const c=document.createElement('canvas'); const ctx=c.getContext('2d',{willReadFrequently:true});
+    const w=c.width=80, h=c.height=80; ctx.drawImage(img,0,0,w,h);
+    const data=ctx.getImageData(0,0,w,h).data; let r=0,g=0,b=0,cnt=0;
+    for(let i=0;i<data.length;i+=4){ const a=data[i+3]; if(a<30) continue; r+=data[i]; g+=data[i+1]; b+=data[i+2]; cnt++; }
+    if(cnt){ r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
+      const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent',accent);
     }
+  }catch(e){}
+  // update blurred backdrop
+  const url = img.currentSrc || img.src;
+  el.backdrop.style.backgroundImage = `url('${url}')`;
+}
 
-    /* ===== Clock (12-hour) ===== */
-    function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm = h>=12? 'PM':'AM'; h = h%12 || 12; return {h, m, ampm}; }
-    function startClock(){ const tick=()=>{ const d=new Date(); const {h,m,ampm}=fmtTime(d); el.clock.textContent = `${h}:${m}`; el.ampm.textContent=ampm; }; tick(); setInterval(tick, 15000); }
+/* ===== Clock (12-hour) ===== */
+function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm = h>=12? 'PM':'AM'; h = h%12 || 12; return {h, m, ampm}; }
+function startClock(){
+  const tick=()=>{ const d=new Date(); const {h,m,ampm}=fmtTime(d); el.clock.textContent=`${h}:${m}`; el.ampm.textContent=ampm; };
+  tick(); setInterval(tick, 15000);
+}
 
-    /* ===== Playlist & Today logic ===== */
-    function ensureToday(){
-      const today = dayISO(new Date());
-      if(todaySel.date !== today){ todaySel = { date: today, ids: [] }; }
-      if(!todaySel.ids.length){
-        const due = []; const fresh = [];
-        for(const c of deck){ const p=ensureProgress(c); if(p.state!=='new' && p.dueISO<=today){ due.push(c.id); } else if(p.state==='new'){ fresh.push(c.id); } }
-        const chosen = [...due.slice(0, cfg.dailyCount)];
-        for(const id of fresh){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(id)) chosen.push(id); }
-        if(chosen.length<Math.min(cfg.dailyCount, deck.length)){
-          for(const c of deck){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(c.id)) chosen.push(c.id); }
-        }
-        todaySel.ids = chosen.slice(0, cfg.dailyCount);
-        saveToday();
-      }
+/* ===== Today & Playlist ===== */
+function ensureToday(){
+  const today=dayISO(new Date());
+  if(todaySel.date !== today){ todaySel = { date: today, ids: [] }; }
+  if(!todaySel.ids.length){
+    const due=[], fresh=[];
+    for(const c of deck){ const p=ensureProgress(c); if(p.state!=='new' && p.dueISO<=today){ due.push(c.id); } else if(p.state==='new'){ fresh.push(c.id); } }
+    const chosen=[...due.slice(0,cfg.dailyCount)];
+    for(const id of fresh){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(id)) chosen.push(id); }
+    if(chosen.length<Math.min(cfg.dailyCount, deck.length)){
+      for(const c of deck){ if(chosen.length>=cfg.dailyCount) break; if(!chosen.includes(c.id)) chosen.push(c.id); }
     }
+    todaySel.ids = chosen.slice(0, cfg.dailyCount); saveToday();
+  }
+}
 
-    function buildPlaylist(){ ensureToday(); const map=new Map(deck.map(c=>[c.id,c])); playlist=todaySel.ids.map(id=>map.get(id)).filter(Boolean); if(!playlist.length){ playlist=deck.slice(0, cfg.dailyCount); todaySel.ids=playlist.map(c=>c.id); saveToday(); } session.index=0; updateChip(); }
+function buildPlaylist(){
+  ensureToday();
+  const map=new Map(deck.map(c=>[c.id,c]));
+  playlist = todaySel.ids.map(id=>map.get(id)).filter(Boolean);
+  if(!playlist.length){ playlist = deck.slice(0, cfg.dailyCount); todaySel.ids = playlist.map(c=>c.id); saveToday(); }
+  session.index=0; updateChip();
+}
 
-    /* ===== Rendering ===== */
-    function setMeta(artist, title, details){ el.artist.textContent=artist||''; el.title.textContent=title||''; el.details.textContent=details||''; }
-    function hideMeta(){ for(const n of [el.artist, el.title, el.details]){ n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)'; } }
+/* ===== Render ===== */
+function setMeta(artist, title, details){
+  el.artist.textContent=artist||''; el.title.textContent=title||''; el.details.textContent=details||'';
+}
+function hideMeta(){
+  for(const n of [el.artist, el.title, el.details]){
+    n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)';
+  }
+}
 
-    function loadImageFor(card){ return new Promise((resolve)=>{ const src = isHttp(card.image)? card.image : (cfg.imageBase||'./') + card.image; el.img.onload=()=>resolve(); el.img.onerror=()=>resolve(); el.img.src=src; }); }
+function loadImageFor(card){
+  return new Promise((resolve)=>{ const src = isHttp(card.image)? card.image : (cfg.imageBase||'./') + card.image;
+    el.img.onload=()=>resolve(); el.img.onerror=()=>resolve(); el.img.src=src;
+  });
+}
 
-    function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
+function updateChip(){ const n=playlist.length||0; const i=Math.min(session.index+1, Math.max(n,1)); el.chip.textContent=`Today ${i}/${n}`; }
 
-    async function showCurrent(auto=true){ const card=playlist[session.index]; if(!card){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
-      hideMeta(); setMeta('', '', ''); await loadImageFor(card); if(cfg.autoAccent==='on') autoAccentFromImage(el.img); if(auto){ session.phase=0; runReveal(); } updateChip(); // mark persists per artwork; do not clear here
+async function showCurrent(auto=true){
+  const card=playlist[session.index];
+  if(!card){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
+  hideMeta(); setMeta('', '', '');
+  await loadImageFor(card);
+  if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
+  if(auto){ session.phase=0; runReveal(); }
+  updateChip();
+}
+
+function revealStep(){
+  const card=playlist[session.index]; if(!card) return;
+  const artist=cleanText(card.artist); const title=cleanText(card.title);
+  const details=cleanText([card.date, card.style].filter(Boolean).join(' • '));
+  if(session.phase===0){ /* image only */ }
+  else if(session.phase===1){ el.artist.classList.add('reveal'); el.artist.removeAttribute('aria-hidden'); el.artist.textContent=artist; }
+  else if(session.phase===2){ el.title.classList.add('reveal'); el.title.removeAttribute('aria-hidden'); el.title.textContent=title; }
+  else if(session.phase===3){ el.details.classList.add('reveal'); el.details.removeAttribute('aria-hidden'); el.details.textContent=details; }
+}
+
+function runReveal(){
+  const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+  function scheduleNext(){
+    if(session.phase<3){
+      restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); });
+    } else {
+      restartTimer(plan[3]*1000, ()=>{ nextCard(); });
     }
+  }
+  session.phase=0; revealStep(); scheduleNext();
+}
 
-    function revealStep(){ const card=playlist[session.index]; if(!card) return; const artist=cleanText(card.artist); const title=cleanText(card.title); const details=cleanText([card.date, card.style].filter(Boolean).join(' • '));
-      if(session.phase===0){ /* image only */ }
-      else if(session.phase===1){ el.artist.classList.add('reveal'); el.artist.removeAttribute('aria-hidden'); el.artist.textContent=artist; }
-      else if(session.phase===2){ el.title.classList.add('reveal'); el.title.removeAttribute('aria-hidden'); el.title.textContent=title; }
-      else if(session.phase===3){ el.details.classList.add('reveal'); el.details.removeAttribute('aria-hidden'); el.details.textContent=details; }
-    }
+function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
 
-    function runReveal(){ const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-      function scheduleNext(){ if(session.phase<3){ restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); }); } else { restartTimer(plan[3]*1000, ()=>{ nextCard(); }); } }
-      session.phase=0; revealStep(); scheduleNext(); }
+/* Back one fact; if crossing to previous artwork, show artist+title immediately, then details next */
+async function stepBackward(){
+  if(session.phase > 0){
+    session.phase--;
+    hideStepVisualBeyond(session.phase);
+    const delays=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+    restartTimer(delays[session.phase]*1000, ()=>{
+      if(session.phase<3){ session.phase++; revealStep(); } else { nextCard(); }
+    });
+  } else {
+    session.index = (session.index-1+playlist.length)%playlist.length;
+    await showCurrent(false);          // load but don't auto-run
+    session.phase = 1; revealStep();   // artist
+    session.phase = 2; revealStep();   // title
+    restartTimer((+cfg.tTitle || 3)*1000, ()=>{
+      session.phase = 3; revealStep(); // details
+      restartTimer((+cfg.tDetails || 4)*1000, ()=>{ nextCard(); });
+    });
+  }
+}
 
-    function nextCard(){ if(!playlist.length) return; session.index = (session.index+1)%playlist.length; showCurrent(true); }
+function hideStepVisualBeyond(phase){
+  const map=[ el.artist, el.title, el.details ];
+  for(let i=phase;i<3;i++){
+    const n = map[i]; if(!n) continue;
+    n.style.opacity=0; n.style.transform='translateY(8px)'; n.classList.remove('reveal');
+  }
+}
 
-    function stepBackward(){
-      if(session.phase>0){
-        session.phase--; // go back one fact
-        hideStepVisualBeyond(session.phase);
-        // restart timer for the phase we're *at* now (so next reveal happens after this phase's delay)
-        const delays=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
-        restartTimer(delays[session.phase]*1000, ()=>{ if(session.phase<3){ session.phase++; revealStep(); } else { nextCard(); } });
+/* Keep only the button highlight (no overlay mark) */
+function showGradeFeedback(kind){
+  if(kind==='good'){ el.btnGood.classList.add('selected'); el.btnBad.classList.remove('selected'); }
+  else { el.btnBad.classList.add('selected'); el.btnGood.classList.remove('selected'); }
+}
+
+/* ===== Settings modal ===== */
+function openSettings(){
+  const f=el.settingsForm;
+  f.dailyCount.value = cfg.dailyCount;
+  f.imageBase.value = cfg.imageBase;
+  f.tImage.value = cfg.tImage;
+  f.tArtist.value = cfg.tArtist;
+  f.tTitle.value = cfg.tTitle;
+  f.tDetails.value = cfg.tDetails;
+  f.autoAccent.value = cfg.autoAccent;
+  buildDeckListFresh();
+  el.settings.showModal();
+  setTimeout(()=>{ document.activeElement && document.activeElement.blur(); el.settings.focus({preventScroll:true}); }, 0);
+}
+function closeSettings(){ el.settings.close(); }
+
+/* Live selection state inside modal */
+let tempSel = new Set();
+function buildDeckListFresh(){
+  const term=(el.search.value||'').toLowerCase();
+  tempSel = new Set(todaySel.ids);
+  el.deckList.innerHTML=''; let selectedCount = tempSel.size;
+  const updateSelCount=()=>{ el.selCount.textContent = `${selectedCount}/${cfg.dailyCount}`; el.dailyCount.value = cfg.dailyCount; };
+
+  for(const c of deck){
+    const artist=cleanText(c.artist), title=cleanText(c.title);
+    if(term && !(artist.toLowerCase().includes(term)||title.toLowerCase().includes(term))) continue;
+    const row=document.createElement('div'); row.className='row'; row.dataset.id=c.id;
+
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=tempSel.has(c.id);
+    const label=document.createElement('div'); label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
+    const preview=document.createElement('button'); preview.className='btn'; preview.textContent='Image';
+
+    cb.addEventListener('change',()=>{
+      if(cb.checked){
+        if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; } // quietly bump limit
+        tempSel.add(c.id); selectedCount = tempSel.size; updateSelCount(); preview.disabled=false;
       } else {
-        // we were at image-only: move to previous artwork and show last fact
-        session.index = (session.index-1+playlist.length)%playlist.length;
-        showCurrent(false); // load but don't auto-run
-        session.phase = 3;  // last fact
-        revealStep();
-        restartTimer((+cfg.tDetails||4)*1000, ()=>{ nextCard(); });
+        tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount();
       }
-    }
+    });
 
-    function hideStepVisualBeyond(phase){ const map=[ el.artist, el.title, el.details ]; for(let i=phase;i<3;i++){ const n = map[i]; if(!n) continue; n.style.opacity=0; n.style.transform='translateY(8px)'; n.classList.remove('reveal'); } }
+    preview.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const src = isHttp(c.image)? c.image : (cfg.imageBase||'./') + c.image;
+      el.previewImg.src = src; el.imgPreview.classList.add('show');
+    });
 
-    function showGradeFeedback(kind){ el.mark.textContent = kind==='good' ? '✓' : '✕'; el.mark.style.color = kind==='good' ? 'var(--good)' : 'var(--bad)'; /* persistent mark; no auto hide */ }
+    row.appendChild(cb); row.appendChild(label); row.appendChild(preview);
+    el.deckList.appendChild(row);
+  }
+  updateSelCount();
+}
 
-    /* ===== Settings modal logic ===== */
-    function openSettings(){ const f=el.settingsForm; f.dailyCount.value = cfg.dailyCount; f.imageBase.value = cfg.imageBase; f.tImage.value = cfg.tImage; f.tArtist.value = cfg.tArtist; f.tTitle.value = cfg.tTitle; f.tDetails.value = cfg.tDetails; f.autoAccent.value = cfg.autoAccent; buildDeckListFresh(); el.settings.showModal(); setTimeout(()=>{ document.activeElement && document.activeElement.blur(); el.settings.focus({preventScroll:true}); }, 0); }
-    function closeSettings(){ el.settings.close(); }
+el.imgPreview.addEventListener('click', ()=>{
+  el.imgPreview.classList.remove('show'); el.previewImg.src='';
+});
 
-    // Live selection state inside modal
-    let tempSel = new Set();
-    function buildDeckListFresh(){ const term=(el.search.value||'').toLowerCase(); tempSel = new Set(todaySel.ids); el.deckList.innerHTML=''; let selectedCount = tempSel.size; const updateSelCount=()=>{ el.selCount.textContent = `${selectedCount}/${cfg.dailyCount}`; el.dailyCount.value = cfg.dailyCount; };
-      for(const c of deck){ const artist=cleanText(c.artist), title=cleanText(c.title); if(term && !(artist.toLowerCase().includes(term)||title.toLowerCase().includes(term))) continue; const row=document.createElement('div'); row.className='row'; row.dataset.id=c.id;
-        const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=tempSel.has(c.id);
-        const label=document.createElement('div'); label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
-        const jump=document.createElement('button'); jump.className='btn'; jump.textContent='Image';
-        cb.addEventListener('change',()=>{ if(cb.checked){ if(selectedCount>=cfg.dailyCount){ cfg.dailyCount = selectedCount + 1; } tempSel.add(c.id); selectedCount = tempSel.size; updateSelCount(); jump.disabled=false; } else { tempSel.delete(c.id); selectedCount = tempSel.size; updateSelCount(); }
-        });
-        jump.addEventListener('click',(e)=>{ e.preventDefault(); const src = isHttp(c.image)? c.image : (cfg.imageBase||'./') + c.image; el.previewImg.src = src; el.imgPreview.classList.add('show'); });
-        row.appendChild(cb); row.appendChild(label); row.appendChild(jump); el.deckList.appendChild(row);
-      }
-      updateSelCount();
-    }
+el.search.addEventListener('input', buildDeckListFresh);
 
-    el.imgPreview.addEventListener('click', ()=>{ el.imgPreview.classList.remove('show'); el.previewImg.src=''; });
-    el.search.addEventListener('input', buildDeckListFresh);
+el.settingsForm.addEventListener('submit', (e)=>{
+  const action = e.submitter && e.submitter.value;
+  if(action==='save'){
+    const f = el.settingsForm;
+    cfg.dailyCount = Math.max(1, Math.min(200, +f.dailyCount.value||cfg.dailyCount));
+    cfg.imageBase = f.imageBase.value.trim()||'./art/';
+    cfg.tImage=+f.tImage.value||4; cfg.tArtist=+f.tArtist.value||3;
+    cfg.tTitle=+f.tTitle.value||3; cfg.tDetails=+f.tDetails.value||4;
+    cfg.autoAccent=f.autoAccent.value; saveConfig();
 
-    el.settingsForm.addEventListener('submit', (e)=>{ const action = e.submitter && e.submitter.value; if(action==='save'){ const f = el.settingsForm; cfg.dailyCount = Math.max(1, Math.min(200, +f.dailyCount.value||cfg.dailyCount)); cfg.imageBase = f.imageBase.value.trim()||'./art/'; cfg.tImage=+f.tImage.value||4; cfg.tArtist=+f.tArtist.value||3; cfg.tTitle=+f.tTitle.value||3; cfg.tDetails=+f.tDetails.value||4; cfg.autoAccent=f.autoAccent.value; saveConfig(); todaySel.ids = Array.from(tempSel).slice(0, cfg.dailyCount); saveToday(); buildPlaylist(); showCurrent(true); }
-      e.preventDefault(); el.settings.close(); });
+    todaySel.ids = Array.from(tempSel).slice(0, cfg.dailyCount);
+    saveToday(); buildPlaylist(); showCurrent(true);
+  }
+  e.preventDefault(); el.settings.close();
+});
 
-    /* ===== Events ===== */
-    function onHitClick(e){ if(suppressNextClick){ suppressNextClick=false; return; } const rect = e.currentTarget.getBoundingClientRect(); const x = (e.clientX) - rect.left; if(x < rect.width/2){ stepBackward(); } else { // forward one fact
-        if(session.phase<3){ session.phase++; revealStep(); const d=[cfg.tArtist,cfg.tTitle,cfg.tDetails][session.phase-1]; restartTimer((+d||3)*1000, ()=>{ if(session.phase<3){ session.phase++; revealStep(); } else { nextCard(); } }); } else { nextCard(); }
-      } }
+/* ===== Events ===== */
+function onHitClick(e){
+  if(suppressNextClick){ suppressNextClick=false; return; }
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  if(x < rect.width/2){ stepBackward(); }
+  else {
+    if(session.phase<3){
+      session.phase++; revealStep();
+      const d=[cfg.tArtist,cfg.tTitle,cfg.tDetails][session.phase-1];
+      restartTimer((+d||3)*1000, ()=>{
+        if(session.phase<3){ session.phase++; revealStep(); }
+        else { nextCard(); }
+      });
+    } else { nextCard(); }
+  }
+}
 
-    // Long-press to allow native image actions (save/download) on the artwork area
-    let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=550; const MOVE_TOL=12; 
-    function onTouchStart(e){ const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY; const artRect = el.artArea.getBoundingClientRect(); if(t.clientX<artRect.left || t.clientX>artRect.right || t.clientY<artRect.top || t.clientY>artRect.bottom){ return; }
-      lpTimer=setTimeout(()=>{ // temporarily disable hit overlay so the image receives the long-press
-        el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200);
-      }, LONG_PRESS_MS);
-    }
-    function onTouchMove(e){ if(!lpTimer) return; const t=e.touches[0]; if(Math.abs(t.clientX-touchStartX)>MOVE_TOL || Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; } }
-    function onTouchEnd(e){ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }
+// Long-press to allow native image actions on the artwork (phones)
+let lpTimer=null; let touchStartX=0, touchStartY=0; const LONG_PRESS_MS=550; const MOVE_TOL=12;
+function onTouchStart(e){
+  const t=e.touches[0]; touchStartX=t.clientX; touchStartY=t.clientY;
+  const artRect = el.artArea.getBoundingClientRect();
+  if(t.clientX<artRect.left || t.clientX>artRect.right || t.clientY<artRect.top || t.clientY>artRect.bottom){ return; }
+  lpTimer=setTimeout(()=>{
+    // temporarily disable hit overlay so the image receives the long-press
+    el.hits.style.pointerEvents='none'; suppressNextClick=true; setTimeout(()=>{ el.hits.style.pointerEvents='auto'; }, 1200);
+  }, LONG_PRESS_MS);
+}
+function onTouchMove(e){
+  if(!lpTimer) return; const t=e.touches[0];
+  if(Math.abs(t.clientX-touchStartX)>MOVE_TOL || Math.abs(t.clientY-touchStartY)>MOVE_TOL){ clearTimeout(lpTimer); lpTimer=null; }
+}
+function onTouchEnd(){ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }
 
-    el.hits.addEventListener('click', onHitClick);
-    el.hits.addEventListener('touchstart', onTouchStart, {passive:true});
-    el.hits.addEventListener('touchmove', onTouchMove, {passive:true});
-    el.hits.addEventListener('touchend', onTouchEnd, {passive:true});
-    el.hits.addEventListener('touchcancel', onTouchEnd, {passive:true});
+el.hits.addEventListener('click', onHitClick);
+el.hits.addEventListener('touchstart', onTouchStart, {passive:true});
+el.hits.addEventListener('touchmove', onTouchMove, {passive:true});
+el.hits.addEventListener('touchend', onTouchEnd, {passive:true});
+el.hits.addEventListener('touchcancel', onTouchEnd, {passive:true});
 
-    el.btnGood.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'good'); el.btnGood.classList.add('selected'); setTimeout(()=>el.btnGood.classList.remove('selected'), 400); });
-    el.btnBad.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'bad'); el.btnBad.classList.add('selected'); setTimeout(()=>el.btnBad.classList.remove('selected'), 400); });
-    el.btnSettings.addEventListener('click', ()=>{ openSettings(); });
+el.btnGood.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'good'); });
+el.btnBad.addEventListener('click', ()=>{ if(!playlist.length) return; grade(playlist[session.index], 'bad'); });
+el.btnSettings.addEventListener('click', ()=>{ openSettings(); });
 
-    // keyboard (optional)
-    window.addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.75}); } else if(e.key==='ArrowLeft'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.25}); } else if(e.key.toLowerCase()==='g'){ if(playlist.length) grade(playlist[session.index],'good'); } else if(e.key.toLowerCase()==='b'){ if(playlist.length) grade(playlist[session.index],'bad'); } else if(e.key.toLowerCase()==='s'){ openSettings(); } });
+// keyboard (optional)
+window.addEventListener('keydown', (e)=>{
+  if(e.key==='ArrowRight'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.75}); }
+  else if(e.key==='ArrowLeft'){ onHitClick({currentTarget:el.hits, clientX: el.hits.getBoundingClientRect().left + el.hits.offsetWidth*0.25}); }
+  else if(e.key.toLowerCase()==='g'){ if(playlist.length) grade(playlist[session.index],'good'); }
+  else if(e.key.toLowerCase()==='b'){ if(playlist.length) grade(playlist[session.index],'bad'); }
+  else if(e.key.toLowerCase()==='s'){ openSettings(); }
+});
 
-    /* ===== Init ===== */
-    async function init(){ startClock(); try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
-      deck = deck.map(card=>({ ...card, id: String(card.id), artist: cleanText(card.artist), title: cleanText(card.title), date: cleanText(card.date), style: cleanText(card.style) }));
-      if(!deck.length){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
-      ensureToday(); buildPlaylist(); showCurrent(true);
-    }
-    init();
-  </script>
+/* ===== Init ===== */
+async function init(){
+  startClock();
+  try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
+  // sanitize and ensure IDs are strings
+  deck = deck.map(card=>({ ...card, id: String(card.id), artist: cleanText(card.artist), title: cleanText(card.title), date: cleanText(card.date), style: cleanText(card.style) }));
+  if(!deck.length){ setMeta('No deck.json found or empty.', '—', 'Place deck.json next to index.html'); return; }
+  ensureToday(); buildPlaylist(); showCurrent(true);
+}
+init();
+</script>
 </body>
 </html>
