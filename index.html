@@ -9,438 +9,239 @@
       --bg:#0b0b0f;           /* deep night */
       --fg:#e9e9ef;           /* text */
       --muted:#9aa0a6;        /* secondary text */
-      --accent:#6ee7ff;       /* will auto-tint from artwork */
+      --accent:#6ee7ff;       /* auto-tint from artwork */
       --surface:#121218;      /* cards */
       --btn:#1e1e27;
       --good:#2bd576;
       --bad:#ff6b6b;
-      --focus:#88ddff;
       --shadow:0 10px 30px rgba(0,0,0,.35);
       --radius:18px;
-      --step-fade: 500ms;
+      --step-fade: 450ms;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-      display:flex; flex-direction:column; min-height:100vh; overflow:hidden;
-    }
-    header{
-      display:flex; align-items:center; justify-content:space-between; gap:.75rem;
-      padding:.75rem 1rem; background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,0));
-    }
-    header .brand{display:flex; align-items:center; gap:.6rem; font-weight:600; letter-spacing:.2px}
-    header .dot{width:.8rem;height:.8rem;border-radius:50%;background:var(--accent);box-shadow:0 0 24px var(--accent)}
-    header .clock{font-variant-numeric:tabular-nums; color:var(--muted)}
-    header .chip{background:var(--surface); color:var(--muted); padding:.25rem .6rem; border-radius:999px; border:1px solid rgba(255,255,255,.06)}
+    body{ margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; display:flex; min-height:100vh; }
 
-    #app{display:flex; flex-direction:column; gap:.75rem; height:100%;}
+    /* Stage centers a 16:9 frame but adapts to portrait/landscape elegantly */
+    .stage{ position:relative; display:grid; place-items:center; width:100%; height:100vh; padding:1rem; }
+    .frame{ position:relative; width:100%; height:100%; max-width:1600px; aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden; background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%); box-shadow: var(--shadow); display:grid; }
 
-    .stage{position:relative; flex:1; display:grid; place-items:center; padding:0 1rem 1rem 1rem;}
-    .frame{ position:relative; width:100%; height:100%; max-width:1200px; border-radius:var(--radius); overflow:hidden; background: radial-gradient(1200px 600px at 50% 110%, rgba(255,255,255,.05), transparent 60%); box-shadow: var(--shadow); }
+    /* Layout switches by orientation */
+    .layout-portrait{ grid-template-rows: 1fr; }
+    .layout-landscape{ grid-template-columns: 34% 66%; }
 
-    /* image fills while preserving aspect */
-    .art{position:absolute; inset:0; display:grid; place-items:center;}
-    .art img{ max-width:100%; max-height:100%; object-fit:contain; filter: drop-shadow(0 20px 40px rgba(0,0,0,.35));}
+    /* Right panel = artwork in landscape; full frame in portrait */
+    .art{ position:relative; width:100%; height:100%; display:grid; place-items:center; }
+    .art img{ max-width:100%; max-height:100%; object-fit:contain; filter: drop-shadow(0 20px 40px rgba(0,0,0,.35)); }
+    .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
 
-    /* tinted halo derived from dominant color */
-    .tint{position:absolute; inset:-10%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 70%); filter: blur(50px); opacity:.6; pointer-events:none}
+    /* Left column (landscape): big clock with meta below */
+    .side{ display:flex; flex-direction:column; justify-content:flex-start; padding:1.2rem; gap:1rem; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0) 40%); }
+    .clockWrap{ display:flex; flex-direction:column; align-items:flex-start; gap:.2rem; }
+    .clock{ font-variant-numeric:tabular-nums; font-weight:800; line-height:1; letter-spacing:.5px; color:var(--accent); text-shadow:0 0 24px color-mix(in srgb, var(--accent) 40%, transparent); }
+    .clock .ampm{ font-weight:600; color: color-mix(in srgb, var(--accent) 75%, white 10%); opacity:.9; margin-left:.25em; }
 
-    /* overlay content */
-    .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end; padding:1.25rem; gap:.5rem; background:linear-gradient( to top, rgba(3,3,5,.48), rgba(0,0,0,0) 40% );}
-
-    .meta{ display:flex; flex-direction:column; gap:.25rem; max-width:min(900px, 95%);}
-    .kicker{ color:var(--accent); text-transform:uppercase; letter-spacing:.18em; font-weight:700; font-size:.8rem; opacity:0; transform: translateY(8px); }
-    .title{ font-size: clamp(1.4rem, 4.8vw, 2.6rem); font-weight:800; letter-spacing:.2px; line-height:1.1; opacity:0; transform: translateY(8px);}
-    .sub{ color:var(--muted); font-size: clamp(.95rem, 2.6vw, 1.05rem); opacity:0; transform: translateY(8px);}
+    .meta{ display:flex; flex-direction:column; gap:.35rem; max-width: 95%; }
+    .kicker{ color:var(--accent); text-transform:uppercase; letter-spacing:.18em; font-weight:700; font-size:1rem; opacity:0; transform: translateY(8px); }
+    .title{ font-size: clamp(1.3rem, 3.8vw, 2.4rem); font-weight:800; letter-spacing:.2px; line-height:1.1; opacity:0; transform: translateY(8px); }
+    .sub{ color:var(--muted); font-size: clamp(1rem, 2.2vw, 1.1rem); opacity:0; transform: translateY(8px); }
 
     .reveal{ animation: fadeUp var(--step-fade) ease forwards; }
     .reveal:nth-child(1){ animation-delay:0ms }
-    .reveal:nth-child(2){ animation-delay:60ms }
+    .reveal:nth-child(2){ animation-delay:80ms }
     .reveal:nth-child(3){ animation-delay:120ms }
     @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
 
-    /* controls */
-    .controls{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding: .6rem 1rem 1rem; }
-    .btn{ background:var(--btn); color:var(--fg); border:1px solid rgba(255,255,255,.08); padding:.7rem 1rem; border-radius:12px; cursor:pointer; user-select:none; transition: transform .06s ease, background .2s ease, border-color .2s ease; }
+    /* Portrait overlay: big clock top, meta bottom */
+    .overlayTop{ position:absolute; top:.6rem; left:0; right:0; display:flex; justify-content:center; pointer-events:none; }
+    .overlayClock{ font-variant-numeric:tabular-nums; font-weight:900; font-size: clamp(2.2rem, 10vw, 4rem); color:var(--accent); text-shadow:0 0 24px color-mix(in srgb, var(--accent) 40%, transparent); }
+    .overlayBottom{ position:absolute; left:0; right:0; bottom:0; padding:1rem; background:linear-gradient( to top, rgba(3,3,5,.55), rgba(0,0,0,0) 40% ); }
+
+    /* Hit areas for tap-to-navigate (left/back, right/forward) */
+    .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; }
+    .hit{ cursor:pointer; }
+
+    /* Grading footer */
+    .footer{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.8rem 1rem; pointer-events:auto; }
+    .btn{ background:var(--btn); color:var(--fg); border:1px solid rgba(255,255,255,.08); padding:.8rem 1.1rem; border-radius:14px; cursor:pointer; user-select:none; transition: transform .06s ease, background .2s ease, border-color .2s ease; }
     .btn:hover{ transform: translateY(-1px); }
-    .btn:active{ transform: translateY(0); }
     .btn.good{ border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent) inset; }
     .btn.bad{ border-color: color-mix(in srgb, var(--bad) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent) inset; }
-    .btn.secondary{ color:var(--muted); }
+    .btn.selected{ outline:2px solid currentColor; filter: drop-shadow(0 0 12px currentColor); }
 
-    .seg{ display:flex; background:var(--surface); border:1px solid rgba(255,255,255,.08); border-radius:999px; overflow:hidden; }
-    .seg button{ all:unset; padding:.45rem .9rem; cursor:pointer; color:var(--muted); }
-    .seg button.active{ background:rgba(255,255,255,.06); color:var(--fg); }
+    /* Feedback check/cross */
+    .mark{ position:absolute; bottom:4.8rem; right:1rem; font-size:2rem; opacity:0; transform:scale(.9); transition:opacity .25s ease, transform .25s ease; }
+    .mark.show{ opacity:1; transform:scale(1); }
 
-    .pill{ padding:.35rem .7rem; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); color:var(--muted); }
+    /* Stats chip (optional) */
+    .chip{ position:absolute; top:.6rem; right:.6rem; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:.25rem .6rem; color:var(--muted); font-size:.9rem; }
 
-    /* modal */
-    dialog{ border:none; border-radius:16px; background:var(--surface); color:var(--fg); width:min(680px, 92vw); box-shadow: var(--shadow); }
-    dialog::backdrop{ background:rgba(0,0,0,.6); backdrop-filter: blur(3px); }
-    .modal{ padding:1rem; display:grid; gap:1rem; }
-    .grid{ display:grid; grid-template-columns:1fr 1fr; gap: .75rem .75rem; }
-    .grid label{ font-size:.9rem; color:var(--muted); }
-    .grid input[type="number"], .grid input[type="text"], .grid input[type="time"], .grid select{
-      width:100%; background:#0f0f15; border:1px solid rgba(255,255,255,.08); color:var(--fg); padding:.55rem .6rem; border-radius:10px;
+    /* Responsive sizes */
+    @media (orientation: landscape){
+      .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); }
     }
-    .row{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
-    .row .actions{ display:flex; gap:.5rem; }
-
-    .legend{ display:flex; gap:.5rem; align-items:center; color:var(--muted); font-size:.9rem }
-    .legend .dot{ width:.6rem; height:.6rem; border-radius:999px; }
-
-    /* small helpers */
-    .hidden{ display:none !important }
-    .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0 }
+    @media (orientation: portrait){
+      .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); }
+    }
   </style>
 </head>
 <body>
-  <div id="app">
-    <header>
-      <div class="brand"><div class="dot" aria-hidden="true"></div> Art Nightstand</div>
-      <div class="row" style="gap:.5rem">
-        <div id="todayStats" class="chip" title="Today's counts">—</div>
-        <div class="seg" role="tablist" aria-label="Mode">
-          <button id="modeStudy" class="active" role="tab" aria-selected="true">Study</button>
-          <button id="modeNight" role="tab" aria-selected="false">Nightstand</button>
+  <main class="stage">
+    <section class="frame layout-portrait" id="frame">
+      <!-- Landscape side panel (auto-hidden in portrait) -->
+      <aside class="side" id="side" aria-hidden="true" hidden>
+        <div class="clockWrap">
+          <div class="clock" id="clock">--:--<span class="ampm" id="ampm"></span></div>
         </div>
-        <button id="openSettings" class="btn secondary" title="Settings" aria-haspopup="dialog">⚙️</button>
-        <div class="clock" aria-live="polite" id="clock">--:--</div>
-      </div>
-    </header>
+        <div class="meta">
+          <div id="artist" class="kicker" aria-hidden="true"></div>
+          <div id="title" class="title" aria-hidden="true"></div>
+          <div id="details" class="sub" aria-hidden="true"></div>
+        </div>
+      </aside>
 
-    <main class="stage" aria-live="polite">
-      <div class="frame" id="frame">
+      <!-- Artwork area -->
+      <div class="art">
         <div class="tint" id="tint"></div>
-        <div class="art" aria-label="Artwork image">
-          <img id="artImg" alt="Artwork" />
-        </div>
-        <div class="overlay">
+        <img id="artImg" alt="Artwork" />
+        <!-- Portrait overlays -->
+        <div class="overlayTop"><div class="overlayClock" id="pClock" aria-hidden="true">--:--</div></div>
+        <div class="overlayBottom" id="pMeta" aria-hidden="true">
           <div class="meta">
-            <div id="artist" class="kicker" aria-hidden="true"></div>
-            <div id="title" class="title" aria-hidden="true"></div>
-            <div id="details" class="sub" aria-hidden="true"></div>
+            <div id="pArtist" class="kicker" aria-hidden="true"></div>
+            <div id="pTitle" class="title" aria-hidden="true"></div>
+            <div id="pDetails" class="sub" aria-hidden="true"></div>
           </div>
         </div>
-      </div>
-    </main>
+        
+        <!-- Tap hit areas -->
+        <div class="hits" id="hits">
+          <div class="hit" id="hitLeft" aria-label="Back"></div>
+          <div class="hit" id="hitRight" aria-label="Forward"></div>
+        </div>
 
-    <footer class="controls">
-      <button id="btnBad" class="btn bad">Not yet</button>
-      <div class="row" style="gap:.5rem">
-        <button id="btnPrev" class="btn secondary" title="Previous">⟵ Prev</button>
-        <button id="btnReveal" class="btn">Reveal</button>
-        <button id="btnNext" class="btn secondary" title="Next">Next ⟶</button>
-      </div>
-      <button id="btnGood" class="btn good">Got it</button>
-    </footer>
-  </div>
-
-  <!-- Settings Modal -->
-  <dialog id="settings">
-    <form method="dialog" class="modal" id="settingsForm">
-      <h3 style="margin:.2rem 0 .4rem">Settings</h3>
-      <div class="grid">
-        <div>
-          <label>New per day<input name="newPerDay" type="number" min="0" value="10"></label>
-        </div>
-        <div>
-          <label>Reviews per day<input name="reviewsPerDay" type="number" min="0" value="50"></label>
-        </div>
-        <div>
-          <label>Base image path<input name="imageBase" type="text" placeholder="./art/" value="./art/"></label>
-        </div>
-        <div>
-          <label>Auto accent from artwork
-            <select name="autoAccent">
-              <option value="on" selected>On</option>
-              <option value="off">Off</option>
-            </select>
-          </label>
-        </div>
-        <div>
-          <label>Image-only seconds<input name="tImage" type="number" min="1" value="4"></label>
-        </div>
-        <div>
-          <label>Artist seconds<input name="tArtist" type="number" min="1" value="3"></label>
-        </div>
-        <div>
-          <label>Title seconds<input name="tTitle" type="number" min="1" value="3"></label>
-        </div>
-        <div>
-          <label>Details seconds<input name="tDetails" type="number" min="1" value="4"></label>
+        <!-- Grading footer -->
+        <div class="footer">
+          <button id="btnBad" class="btn bad">Not yet</button>
+          <span class="chip" id="chip">—</span>
+          <button id="btnGood" class="btn good">Got it</button>
+          <div class="mark" id="mark">✓</div>
         </div>
       </div>
-      <div class="row">
-        <div class="legend">
-          <div class="dot" style="background:var(--good)"></div>Got it
-          <div class="dot" style="background:var(--bad)"></div>Not yet
-        </div>
-        <div class="actions">
-          <button id="btnRestartCard" value="restart" class="btn bad" title="Treat current card as new">Restart card</button>
-          <button id="btnResetAll" value="reset" class="btn bad" title="Clear all progress">Reset all</button>
-          <button class="btn" value="close">Close</button>
-        </div>
-      </div>
-    </form>
-  </dialog>
+    </section>
+  </main>
 
   <script>
-    /* ====== App Config ====== */
-    const CONFIG_KEY = 'artSRS_config_v1';
-    const STATE_KEY  = 'artSRS_state_v1';
-    const DEFAULTS = {
-      newPerDay: 10,
-      reviewsPerDay: 50,
-      tImage: 4,
-      tArtist: 3,
-      tTitle: 3,
-      tDetails: 4,
-      mode: 'study', // 'study' | 'night'
-      imageBase: './art/',
-      autoAccent: 'on',
-      easeDefault: 2.5
-    };
+    /* ===== Config & State ===== */
+    const CONFIG_KEY = 'artSRS_config_v2';
+    const STATE_KEY  = 'artSRS_state_v2';
+    const DEFAULTS = { tImage:4, tArtist:3, tTitle:3, tDetails:4, imageBase:'./art/', autoAccent:'on', easeDefault:2.5 };
 
-    /* ====== DOM ====== */
     const el = {
+      frame: document.getElementById('frame'),
+      side: document.getElementById('side'),
       img: document.getElementById('artImg'),
-      artist: document.getElementById('artist'),
-      title: document.getElementById('title'),
-      details: document.getElementById('details'),
       tint: document.getElementById('tint'),
-      btnGood: document.getElementById('btnGood'),
-      btnBad: document.getElementById('btnBad'),
-      btnNext: document.getElementById('btnNext'),
-      btnPrev: document.getElementById('btnPrev'),
-      btnReveal: document.getElementById('btnReveal'),
-      todayStats: document.getElementById('todayStats'),
-      clock: document.getElementById('clock'),
-      modeStudy: document.getElementById('modeStudy'),
-      modeNight: document.getElementById('modeNight'),
-      openSettings: document.getElementById('openSettings'),
-      settings: document.getElementById('settings'),
-      settingsForm: document.getElementById('settingsForm'),
-      btnRestartCard: document.getElementById('btnRestartCard'),
-      btnResetAll: document.getElementById('btnResetAll'),
+      clock: document.getElementById('clock'), ampm: document.getElementById('ampm'),
+      pClock: document.getElementById('pClock'),
+      artist: document.getElementById('artist'), title: document.getElementById('title'), details: document.getElementById('details'),
+      pArtist: document.getElementById('pArtist'), pTitle: document.getElementById('pTitle'), pDetails: document.getElementById('pDetails'), pMeta: document.getElementById('pMeta'),
+      hitL: document.getElementById('hitLeft'), hitR: document.getElementById('hitRight'),
+      btnGood: document.getElementById('btnGood'), btnBad: document.getElementById('btnBad'),
+      mark: document.getElementById('mark'), chip: document.getElementById('chip')
     };
 
+    let cfg = loadConfig();
     let deck = [];
-    let progress = {}; // id -> { ease, intervalDays, dueISO, reps, lapses, state, learningStep }
-    let session = { queue: [], index: 0, phase: 0, timers: [], today: dayISO(new Date()), stats: {newUsed:0, reviewUsed:0} };
+    let progress = loadState(); // id -> progress
+    let session = { index:0, phase:0, timers:[], today: dayISO(new Date()) };
 
-    /* ====== Utilities ====== */
-    function dayISO(d){ const z = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return z.toISOString().slice(0,10); }
-    function nowISO(){ return new Date().toISOString(); }
-    function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
-    function isHttp(url){ return /^https?:/i.test(url); }
-
-    function loadConfig(){ const raw = localStorage.getItem(CONFIG_KEY); return raw ? {...DEFAULTS, ...JSON.parse(raw)} : {...DEFAULTS}; }
-    function saveConfig(cfg){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
-    function loadState(){ const raw = localStorage.getItem(STATE_KEY); return raw ? JSON.parse(raw) : {}; }
+    function loadConfig(){ const raw=localStorage.getItem(CONFIG_KEY); return raw?{...DEFAULTS, ...JSON.parse(raw)}:{...DEFAULTS}; }
+    function saveConfig(){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
+    function loadState(){ const raw=localStorage.getItem(STATE_KEY); return raw?JSON.parse(raw):{}; }
     function saveState(){ localStorage.setItem(STATE_KEY, JSON.stringify(progress)); }
 
-    function shuffle(a){ for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
-
-    /* ====== Wake Lock (best-effort) ====== */
-    let wakeLock; async function acquireWake(){ try{ if ('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', ()=>{}); } }catch(e){ /* ignore */ } }
-
-    /* ====== Dominant color from image ====== */
-    function autoAccentFromImage(img){
-      try{
-        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently:true });
-        const w = canvas.width = 64, h = canvas.height = 64; ctx.drawImage(img, 0, 0, w, h);
-        const data = ctx.getImageData(0,0,w,h).data; let r=0,g=0,b=0,count=0;
-        for (let i=0;i<data.length;i+=4){ const a=data[i+3]; if (a<40) continue; r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
-        if(count){ r=Math.round(r/count); g=Math.round(g/count); b=Math.round(b/count); const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent', accent); }
-      }catch(e){ /* ignore */ }
-    }
-
-    /* ====== Spaced Repetition ====== */
-    function ensureProgress(card){
-      if (!progress[card.id]){
-        progress[card.id] = { ease: loadConfig().easeDefault, intervalDays: 0, dueISO: session.today, reps: 0, lapses: 0, state: 'new', learningStep: 0 };
-      }
-      return progress[card.id];
-    }
-
-    function grade(card, quality){
-      const p = ensureProgress(card);
-      const today = session.today;
-      if (quality==='good'){
-        if (p.state==='new'){
-          p.state = 'learning'; p.learningStep = 1; p.intervalDays = 1; p.dueISO = dayISO(new Date(Date.now()+86400000));
-        } else if (p.state==='learning'){
-          if (p.learningStep===1){ p.learningStep=2; p.intervalDays = 3; p.dueISO = dayISO(new Date(Date.now()+3*86400000)); }
-          else { p.state='review'; p.learningStep=0; p.intervalDays = Math.max(5, p.intervalDays||5); p.dueISO = dayISO(new Date(Date.now()+p.intervalDays*86400000)); }
-        } else { // review
-          // simple SM-2 style without complexity
-          const ease = p.ease; const next = Math.round(Math.max(1, p.intervalDays * ease));
-          p.intervalDays = next; p.dueISO = dayISO(new Date(Date.now()+next*86400000));
-        }
-        p.reps++;
-      } else { // not yet
-        p.lapses++; p.state = 'learning'; p.learningStep = 1; p.intervalDays = 1; p.dueISO = dayISO(new Date(Date.now()+86400000));
-      }
-      saveState();
-    }
-
-    function buildTodayQueue(){
-      const cfg = loadConfig();
-      const today = session.today; session.stats.newUsed=0; session.stats.reviewUsed=0;
-      const dueReviews = []; const news = [];
-      for (const c of deck){ const p = ensureProgress(c); if (p.state==='new'){ news.push(c); } else if (p.dueISO <= today){ dueReviews.push(c); }
-      }
-      // apply quotas
-      const takeReviews = dueReviews.slice(0, cfg.reviewsPerDay);
-      const remainingSlots = Math.max(0, cfg.newPerDay);
-      const takeNews = news.slice(0, remainingSlots);
-      const q = [...takeReviews, ...takeNews];
-      session.queue = shuffle(q);
-      session.index = 0; session.phase = 0; clearTimers();
-      updateStats();
-    }
-
-    /* ====== Rendering ====== */
+    function dayISO(d){ const z= new Date(d.getFullYear(), d.getMonth(), d.getDate()); return z.toISOString().slice(0,10); }
+    function isHttp(url){ return /^https?:/i.test(url); }
     function clearTimers(){ session.timers.forEach(t=>clearTimeout(t)); session.timers=[]; }
+    function restartTimer(ms, fn){ clearTimers(); const t=setTimeout(fn, ms); session.timers=[t]; }
 
-    function setText(elm, text){ elm.textContent = text || ''; }
+    /* ===== Deck & Progress ===== */
+    function ensureProgress(card){ if(!progress[card.id]) progress[card.id]={ ease: cfg.easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0, lastGrade:null }; return progress[card.id]; }
 
-    function loadImageFor(card){
-      return new Promise((resolve,reject)=>{
-        const src = isHttp(card.image) ? card.image : (loadConfig().imageBase || './') + card.image;
-        el.img.onload = ()=>resolve(); el.img.onerror = ()=>reject(new Error('Image failed'));
-        el.img.src = src;
-      });
+    function grade(card, kind){ const p=ensureProgress(card); const today=session.today; if(kind==='good'){ if(p.state==='new'){ p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); } else if(p.state==='learning'){ if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); } else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); } } else { const next=Math.round(Math.max(1, p.intervalDays * p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); } p.reps++; }
+      else { p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
+      p.lastGrade = kind; saveState(); showGradeFeedback(kind); updateChip(); }
+
+    /* ===== Orientation-aware layout ===== */
+    function applyLayout(){ const portrait = window.matchMedia('(orientation: portrait)').matches; if(portrait){ el.frame.classList.remove('layout-landscape'); el.frame.classList.add('layout-portrait'); el.side.hidden=true; el.side.setAttribute('aria-hidden','true'); el.pClock.removeAttribute('aria-hidden'); el.pMeta.removeAttribute('aria-hidden'); } else { el.frame.classList.remove('layout-portrait'); el.frame.classList.add('layout-landscape'); el.side.hidden=false; el.side.removeAttribute('aria-hidden'); el.pClock.setAttribute('aria-hidden','true'); el.pMeta.setAttribute('aria-hidden','true'); } }
+
+    /* ===== Accent from image ===== */
+    function autoAccentFromImage(img){ try{ const canvas=document.createElement('canvas'); const ctx=canvas.getContext('2d',{willReadFrequently:true}); const w=canvas.width=80, h=canvas.height=80; ctx.drawImage(img,0,0,w,h); const data=ctx.getImageData(0,0,w,h).data; let r=0,g=0,b=0,c=0; for(let i=0;i<data.length;i+=4){ const a=data[i+3]; if(a<30) continue; r+=data[i]; g+=data[i+1]; b+=data[i+2]; c++; } if(c){ r=Math.round(r/c); g=Math.round(g/c); b=Math.round(b/c); const accent=`rgb(${r},${g},${b})`; document.documentElement.style.setProperty('--accent', accent); } }catch(e){} }
+
+    /* ===== Clock (12-hour) ===== */
+    function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm = h>=12? 'PM':'AM'; h = h%12 || 12; return {h, m, ampm}; }
+    function startClock(){ const tick=()=>{ const d=new Date(); const {h,m,ampm}=fmtTime(d); el.clock.textContent = `${h}:${m}`; el.ampm.textContent=ampm; el.pClock.textContent = `${h}:${m} ${ampm}`; }; tick(); setInterval(tick, 15000); }
+
+    /* ===== Rendering ===== */
+    function setMeta(artist, title, details){
+      // Landscape meta
+      el.artist.textContent=artist||''; el.title.textContent=title||''; el.details.textContent=details||'';
+      // Portrait meta
+      el.pArtist.textContent=artist||''; el.pTitle.textContent=title||''; el.pDetails.textContent=details||'';
+    }
+    function hideMeta(){ for(const n of [el.artist, el.title, el.details, el.pArtist, el.pTitle, el.pDetails]){ n.classList.remove('reveal'); n.style.opacity=0; n.style.transform='translateY(8px)'; } }
+
+    async function loadImageFor(card){ return new Promise((resolve,reject)=>{ const src = isHttp(card.image)? card.image : (cfg.imageBase||'./') + card.image; el.img.onload=()=>resolve(); el.img.onerror=()=>resolve(); el.img.src=src; }); }
+
+    function updateChip(){ const n=deck.length; const i=session.index+1; el.chip.textContent=`${i}/${n}`; }
+
+    async function showCurrent(){ const card=deck[session.index]; if(!card) return; hideMeta(); setMeta('', '', ''); await loadImageFor(card); if(cfg.autoAccent==='on') autoAccentFromImage(el.img); session.phase=0; runReveal(); updateChip(); }
+
+    function revealStep(){ const card=deck[session.index]; const artist=card.artist||''; const title=card.title||''; const details=[card.date, card.style].filter(Boolean).join(' • ');
+      if(session.phase===0){ /* image only */ }
+      else if(session.phase===1){ for(const n of [el.artist, el.pArtist]){ n.classList.add('reveal'); n.removeAttribute('aria-hidden'); n.textContent=artist; } }
+      else if(session.phase===2){ for(const n of [el.title, el.pTitle]){ n.classList.add('reveal'); n.removeAttribute('aria-hidden'); n.textContent=title; } }
+      else if(session.phase===3){ for(const n of [el.details, el.pDetails]){ n.classList.add('reveal'); n.removeAttribute('aria-hidden'); n.textContent=details; } }
     }
 
-    function hideMeta(){
-      // instantly hide (no animation) before next reveal sequence
-      for (const node of [el.artist, el.title, el.details]){
-        node.classList.remove('reveal'); node.style.opacity=0; node.style.transform='translateY(8px)'; node.setAttribute('aria-hidden','true');
+    function runReveal(){ const plan=[cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails].map(Number);
+      function scheduleNext(){ if(session.phase<3){ restartTimer(plan[session.phase]*1000, ()=>{ session.phase++; revealStep(); scheduleNext(); }); } else { // end of details -> advance to next artwork after details interval
+          restartTimer(plan[3]*1000, ()=>{ nextCard(); }); }
       }
+      // Start at image-only then schedule artist
+      session.phase=0; revealStep(); scheduleNext();
     }
 
-    async function showCurrent(){
-      if (!session.queue.length){ emptyState(); return; }
-      const card = session.queue[session.index]; hideMeta();
-      setText(el.artist, ''); setText(el.title, ''); setText(el.details, '');
-      try { await loadImageFor(card); if (loadConfig().autoAccent==='on') autoAccentFromImage(el.img); } catch(e){ /* ignore */ }
-      session.phase = 0; // 0=image only, 1=artist, 2=title, 3=details, 4=grade
-      runReveal(card);
-    }
+    function nextCard(){ session.index = (session.index+1)%deck.length; showCurrent(); }
+    function prevCard(){ session.index = (session.index-1+deck.length)%deck.length; showCurrent(); session.phase=3; }
 
-    function runReveal(card){
-      const cfg = loadConfig(); clearTimers();
-      const artist = card.artist || '';
-      const title  = card.title || '';
-      const details = [card.date, card.style].filter(Boolean).join(' • ');
-      const plan = [ cfg.tImage, cfg.tArtist, cfg.tTitle, cfg.tDetails ].map(Number);
+    function forward(){ if(session.phase<3){ session.phase++; revealStep(); restartTimer([cfg.tArtist,cfg.tTitle,cfg.tDetails][session.phase-1]*1000, ()=>{ if(session.phase<3){ session.phase++; revealStep(); } else { nextCard(); } }); } else { nextCard(); } }
+    function backward(){ if(session.phase>0){ session.phase--; hideStepVisualBeyond(session.phase); restartTimer([cfg.tImage,cfg.tArtist,cfg.tTitle][session.phase]*1000, ()=>{ /* resume auto */ forward(); }); } else { prevCard(); } }
 
-      function stepReveal(){
-        if (session.phase===0){ /* image only */ }
-        if (session.phase===1){ setText(el.artist, artist); el.artist.classList.add('reveal'); el.artist.removeAttribute('aria-hidden'); }
-        if (session.phase===2){ setText(el.title, title); el.title.classList.add('reveal'); el.title.removeAttribute('aria-hidden'); }
-        if (session.phase===3){ setText(el.details, details); el.details.classList.add('reveal'); el.details.removeAttribute('aria-hidden'); }
-        if (session.phase>=4){ // grading phase
-          return;
-        }
-        session.phase++;
-        if (getMode()==='night'){
-          const t = setTimeout(stepReveal, plan[session.phase-1]*1000); session.timers.push(t);
-        }
+    function hideStepVisualBeyond(phase){ const map=[ [el.artist, el.pArtist], [el.title, el.pTitle], [el.details, el.pDetails] ]; for(let i=phase;i<3;i++){ for(const n of (map[i]||[])){ n.style.opacity=0; n.style.transform='translateY(8px)'; n.classList.remove('reveal'); } } }
+
+    function showGradeFeedback(kind){ el.mark.textContent = kind==='good' ? '✓' : '✕'; el.mark.style.color = kind==='good' ? 'var(--good)' : 'var(--bad)'; el.mark.classList.add('show'); setTimeout(()=>el.mark.classList.remove('show'), 900); if(kind==='good'){ el.btnGood.classList.add('selected'); setTimeout(()=>el.btnGood.classList.remove('selected'), 800); } else { el.btnBad.classList.add('selected'); setTimeout(()=>el.btnBad.classList.remove('selected'), 800); } }
+
+    /* ===== Events ===== */
+    function onHit(e){ const rect = e.currentTarget.getBoundingClientRect(); const x = (e.touches? e.touches[0].clientX : e.clientX) - rect.left; if(x < rect.width/2){ backward(); } else { forward(); } }
+
+    window.addEventListener('resize', applyLayout);
+    document.getElementById('hits').addEventListener('click', onHit);
+    document.getElementById('hits').addEventListener('touchstart', onHit, {passive:true});
+    el.btnGood.addEventListener('click', ()=>{ grade(deck[session.index], 'good'); });
+    el.btnBad.addEventListener('click', ()=>{ grade(deck[session.index], 'bad'); });
+
+    // keyboard (optional)
+    window.addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight'){ forward(); } else if(e.key==='ArrowLeft'){ backward(); } else if(e.key.toLowerCase()==='g'){ grade(deck[session.index],'good'); } else if(e.key.toLowerCase()==='b'){ grade(deck[session.index],'bad'); } });
+
+    /* ===== Init ===== */
+    async function init(){ applyLayout(); startClock(); try{ const res= await fetch('deck.json'); deck = await res.json(); } catch(e){ deck = []; }
+      if(!deck.length){ // fallback sample
+        deck=[{id:'1', image:'https://upload.wikimedia.org/wikipedia/commons/3/3a/Vincent_Willem_van_Gogh_128.jpg', artist:'Vincent van Gogh', title:'Self-Portrait', date:'1887', style:'Post-Impressionism'}];
       }
-
-      if (getMode()==='night'){ stepReveal(); } else { /* study: wait for manual reveal */ }
-      updateStats();
-    }
-
-    function emptyState(){
-      setText(el.artist, 'All done for today');
-      setText(el.title, 'Tap Next or adjust settings');
-      setText(el.details, '');
-      [el.artist, el.title].forEach(n=>{ n.classList.add('reveal'); n.removeAttribute('aria-hidden'); });
-      el.details.classList.remove('reveal'); el.details.setAttribute('aria-hidden','true');
-    }
-
-    function updateStats(){
-      const cfg = loadConfig();
-      // Count how many due remain roughly by type
-      const today = session.today; let dueR=0, newN=0;
-      for(const c of deck){ const p=ensureProgress(c); if(p.state==='new') newN++; else if(p.dueISO<=today) dueR++; }
-      const inQ = session.queue.length ? `${session.index+1}/${session.queue.length}` : '0/0';
-      el.todayStats.textContent = `Q ${inQ} • Due ${dueR} • New ${Math.min(newN, cfg.newPerDay)}`;
-    }
-
-    /* ====== Navigation & Actions ====== */
-    function nextCard(){ if(!session.queue.length) return; session.index = (session.index+1) % session.queue.length; showCurrent(); }
-    function prevCard(){ if(!session.queue.length) return; session.index = (session.index-1+session.queue.length) % session.queue.length; showCurrent(); }
-
-    function revealOne(){ if (session.phase>=4){ return; } session.phase++; const card = session.queue[session.index]; const cfg = loadConfig();
-      if (session.phase===1){ setText(el.artist, card.artist||''); el.artist.classList.add('reveal'); el.artist.removeAttribute('aria-hidden'); }
-      else if (session.phase===2){ setText(el.title, card.title||''); el.title.classList.add('reveal'); el.title.removeAttribute('aria-hidden'); }
-      else if (session.phase===3){ const det=[card.date, card.style].filter(Boolean).join(' • '); setText(el.details, det); el.details.classList.add('reveal'); el.details.removeAttribute('aria-hidden'); }
-    }
-
-    function onGrade(kind){ if (!session.queue.length) return; const card = session.queue[session.index]; grade(card, kind); // remove from today queue
-      session.queue.splice(session.index, 1);
-      if (session.index>=session.queue.length) session.index=0;
-      if (session.queue.length===0){ buildTodayQueue(); }
       showCurrent();
     }
-
-    function getMode(){ return document.getElementById('modeNight').classList.contains('active') ? 'night' : 'study'; }
-    function setMode(m){ if(m==='night'){ el.modeNight.classList.add('active'); el.modeStudy.classList.remove('active'); } else { el.modeStudy.classList.add('active'); el.modeNight.classList.remove('active'); } saveConfig({ ...loadConfig(), mode:m }); }
-
-    /* ====== Settings Modal ====== */
-    function openSettings(){ const cfg=loadConfig(); const f=el.settingsForm; f.newPerDay.value=cfg.newPerDay; f.reviewsPerDay.value=cfg.reviewsPerDay; f.tImage.value=cfg.tImage; f.tArtist.value=cfg.tArtist; f.tTitle.value=cfg.tTitle; f.tDetails.value=cfg.tDetails; f.imageBase.value = cfg.imageBase; f.autoAccent.value = cfg.autoAccent; el.settings.showModal(); }
-    function closeSettings(){ el.settings.close(); }
-
-    el.settingsForm.addEventListener('close', ()=>{ /* noop for esc */});
-    el.settingsForm.addEventListener('submit', (e)=>{ const v=e.submitter?.value; if(v==='reset'){ if(confirm('Reset ALL progress?')){ progress={}; saveState(); buildTodayQueue(); showCurrent(); } e.preventDefault(); return; } if(v==='restart'){ const cur=session.queue[session.index]; if(cur && confirm('Restart this card as new?')){ progress[cur.id] = { ease: loadConfig().easeDefault, intervalDays:0, dueISO: session.today, reps:0, lapses:0, state:'new', learningStep:0 }; saveState(); buildTodayQueue(); showCurrent(); } e.preventDefault(); return; }
-      const f=e.target; const cfg={ ...loadConfig(), newPerDay:+f.newPerDay.value, reviewsPerDay:+f.reviewsPerDay.value, tImage:+f.tImage.value, tArtist:+f.tArtist.value, tTitle:+f.tTitle.value, tDetails:+f.tDetails.value, imageBase: f.imageBase.value.trim()||'./art/', autoAccent: f.autoAccent.value}; saveConfig(cfg); buildTodayQueue(); showCurrent(); });
-
-    /* ====== Clock ====== */
-    function startClock(){ const tick=()=>{ const d=new Date(); const h=d.getHours().toString().padStart(2,'0'); const m=d.getMinutes().toString().padStart(2,'0'); el.clock.textContent=`${h}:${m}`; }; tick(); setInterval(tick, 10000); }
-
-    /* ====== Init ====== */
-    async function init(){
-      // modes from config
-      const cfg = loadConfig(); setMode(cfg.mode);
-      progress = loadState();
-      startClock(); acquireWake();
-      // Load deck.json next to this file
-      const res = await fetch('deck.json');
-      deck = await res.json();
-      // Build initial queue
-      buildTodayQueue();
-      showCurrent();
-    }
-
-    /* ====== Events ====== */
-    el.btnGood.addEventListener('click', ()=>onGrade('good'));
-    el.btnBad.addEventListener('click', ()=>onGrade('bad'));
-    el.btnNext.addEventListener('click', nextCard);
-    el.btnPrev.addEventListener('click', prevCard);
-    el.btnReveal.addEventListener('click', ()=>{ if(getMode()==='study') revealOne(); });
-
-    el.modeStudy.addEventListener('click', ()=>setMode('study'));
-    el.modeNight.addEventListener('click', ()=>setMode('night'));
-
-    el.openSettings.addEventListener('click', openSettings);
-
-    // Keybindings
-    window.addEventListener('keydown', (e)=>{
-      if (e.key==='ArrowRight'){ onGrade('good'); }
-      else if (e.key==='ArrowLeft'){ onGrade('bad'); }
-      else if (e.key===' ' || e.key==='Enter'){ if(getMode()==='study'){ revealOne(); } }
-      else if (e.key==='['){ prevCard(); }
-      else if (e.key===']'){ nextCard(); }
-      else if (e.key.toLowerCase()==='s'){ openSettings(); }
-    });
-
-    // Start
     init();
   </script>
 </body>
