@@ -390,10 +390,13 @@ async function acquireWakeLock(reason = '') {
     wakeLock.addEventListener('release', () => {
       console.log('[wakeLock] released by system');
       wakeLock = null;
+      // Kick in fallback if iOS keeps dropping the lock
+      enableNoSleep('wakelock-release');
       if (document.visibilityState === 'visible') {
         setTimeout(() => acquireWakeLock('release'), 250);
       }
     });
+
   } catch (err) {
     console.warn('[wakeLock] failed:', err.name, err.message);
   }
@@ -427,6 +430,66 @@ window.addEventListener('pagehide', () => {
 });
 
 
+// --- Fallback "NoSleep" video trick for older iOS / stubborn PWAs ---
+let noSleep = null;
+let noSleepEnabled = false;
+
+function ensureNoSleepLoaded() {
+  return new Promise((resolve, reject) => {
+    if (window.NoSleep) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/nosleep.js@0.12.0/dist/NoSleep.min.js';
+    s.defer = true;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function enableNoSleep(reason='') {
+  try {
+    await ensureNoSleepLoaded();
+    noSleep = noSleep || new NoSleep();
+    await noSleep.enable();
+    noSleepEnabled = true;
+    console.log('[noSleep] enabled', reason);
+  } catch (e) {
+    console.warn('[noSleep] failed', e);
+  }
+}
+function disableNoSleep() {
+  try { noSleep?.disable(); } catch {}
+  noSleepEnabled = false;
+}
+
+// Prefer Wake Lock; fall back to NoSleep when unavailable/ignored.
+function setupStayAwake() {
+  // keep using your existing wake-lock wiring
+  setupWakeLock();
+
+  // First user gesture: enable fallback if Wake Lock API is missing
+  const firstGesture = async () => {
+    if (!('wakeLock' in navigator)) await enableNoSleep('no-wakelock');
+    window.removeEventListener('pointerdown', firstGesture, true);
+    window.removeEventListener('touchstart', firstGesture, true);
+    window.removeEventListener('click', firstGesture, true);
+  };
+  window.addEventListener('pointerdown', firstGesture, true);
+  window.addEventListener('touchstart', firstGesture, true);
+  window.addEventListener('click', firstGesture, true);
+
+  // Re-enable fallback when coming back to the app; stop when leaving
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      if (!('wakeLock' in navigator)) await enableNoSleep('visible');
+    } else {
+      disableNoSleep();
+    }
+  });
+  window.addEventListener('pagehide', disableNoSleep);
+}
+
+  
 /* Exclude removed cards from selection */
 function ensureToday(){
   const today=dayISO(new Date());
@@ -752,9 +815,11 @@ async function init(){
   try{ const res=await fetch('deck.json'); deck=await res.json(); }catch(e){ deck=[]; }
   deck=deck.map(card=>({...card,id:String(card.id||card.title),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
   if(!deck.length){ el.title.textContent='No deck.json found or empty.';return;}
-  ensureToday(); buildPlaylist(); showCurrent(true);
-  setupWakeLock();
+    ensureToday(); buildPlaylist(); showCurrent(true);
+  setupStayAwake();
 }
+init();
+
 init();
 </script>
 </body>
