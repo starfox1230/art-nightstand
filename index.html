@@ -374,6 +374,44 @@ function autoAccentFromImage(img){
 function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm=h>=12?'PM':'AM'; h=h%12||12; return {h,m,ampm}; }
 function startClock(){ const tick=()=>{const d=new Date();const{h,m,ampm}=fmtTime(d);el.clock.textContent=`${h}:${m}`;el.ampm.textContent=ampm;}; tick(); setInterval(tick,15000); }
 
+// --- Keep screen awake (Wake Lock API) ---
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      console.log('[wakeLock] released by the system');
+      wakeLock = null;
+    });
+    console.log('[wakeLock] acquired');
+  } catch (err) {
+    console.warn('[wakeLock] failed:', err.name, err.message);
+  }
+}
+
+// Ask for wake lock on the first user gesture (required on iOS/Safari)
+function setupWakeLockOnce() {
+  const handler = () => {
+    if ('wakeLock' in navigator && !wakeLock) requestWakeLock();
+    window.removeEventListener('pointerdown', handler, { capture: true });
+  };
+  window.addEventListener('pointerdown', handler, { capture: true, once: true });
+}
+
+// Re-acquire if the app becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && 'wakeLock' in navigator && !wakeLock) {
+    requestWakeLock();
+  }
+});
+
+// Be polite on leave
+window.addEventListener('pagehide', () => {
+  try { wakeLock?.release(); } catch {}
+});
+
+
 /* Exclude removed cards from selection */
 function ensureToday(){
   const today=dayISO(new Date());
