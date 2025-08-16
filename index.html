@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<!-- NEW: PWA and iOS Fullscreen Meta Tags -->
+<!-- PWA and iOS Fullscreen Meta Tags -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Art Slideshow">
-<link rel="apple-touch-icon" href="apple-touch-icon.png"> <!-- Optional: Add a 180x180px icon named 'apple-touch-icon.png' to your folder -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png"> <!-- Optional: Add a 180x180px icon named 'apple-touch-icon.png' -->
 
 <title>Art Nightstand Slideshow</title>
 <style>
@@ -18,23 +18,27 @@
     --title-fg: color-mix(in srgb, var(--fg) 85%, var(--muted) 15%);
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html,body{height:100%; overflow: hidden;}
   body{
     margin:0; color:var(--fg);
     font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
     background:var(--bg);
     -webkit-tap-highlight-color: transparent;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    /* FIX: Disable double-tap to zoom */
+    touch-action: manipulation;
   }
   input, textarea, select { user-select: auto; -webkit-user-select: auto; }
 
-  .backdrop{ position:fixed; inset:0; z-index:0; background:var(--bg); pointer-events:none; }
-  .stage{ position:relative; z-index:1; display:grid; place-items:center; width:100%; height:100vh; padding:1rem; cursor: pointer; }
+  /* FIX: Stage now fills the entire screen, eliminating black bars */
+  .stage{
+    position:relative; z-index:1; display:grid; place-items:center;
+    width:100%; height:100%; /* Changed from 100vh to 100% for better compatibility */
+  }
   .frame{
-    position:relative; width:100%; height:100%; max-width:1600px;
+    position:relative; width:100%; max-width:1600px;
     aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
     box-shadow:var(--shadow); display:grid; grid-template-columns:34% 66%;
-    cursor: default;
   }
   .frame-backdrop {
     position: absolute; inset: 0; z-index: 0;
@@ -67,8 +71,9 @@
   .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
   .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index: 3; }
   .hit{ cursor:pointer; }
+  /* FIX: Footer no longer blocks clicks from passing through to .hits */
   .footer{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.8rem 1rem; z-index:5; pointer-events: none; }
-  .leftGroup{ display:flex; gap:.6rem; align-items:center; pointer-events: auto; }
+  .leftGroup, .chip{ pointer-events: auto; }
   .btn{
     background:var(--btn); color:var(--fg); border:1px solid rgba(255,255,255,.08);
     padding:.8rem 1.1rem; border-radius:14px; cursor:pointer;
@@ -103,7 +108,6 @@
 </style>
 </head>
 <body>
-  <div class="backdrop"></div>
   <main class="stage" id="stage">
     <section class="frame" id="frame">
       <div class="frame-backdrop" id="frameBackdrop"></div>
@@ -140,8 +144,8 @@
     <form method="dialog" class="modal" id="settingsForm">
       <h3 style="margin:.2rem 0 .2rem">Settings</h3>
       <div class="grid2">
-        <div class="field"><label>New Cards Per Day</label><input name="newCount" id="newCount" type="number" min="0" value="5"></div>
-        <div class="field"><label>Max Reviews Per Day</label><input name="maxReviews" id="maxReviews" type="number" min="0" value="20" placeholder="999 for all due"></div>
+        <div class="field"><label>New Cards Per Day</label><input name="newCount" type="number" min="0" value="5"></div>
+        <div class="field"><label>Max Reviews Per Day</label><input name="maxReviews" type="number" min="0" value="20" placeholder="999 for all due"></div>
       </div>
       <div class="field"><label>Base image path</label><input name="imageBase" type="text" placeholder="./art/" value="./art/"></div>
       <div class="grid3">
@@ -215,12 +219,7 @@ function cleanText(val){ if(val==null) return ''; const tmp=document.createEleme
 
 function startTimer(callback, duration) {
   clearTimeout(session.timer.id);
-  session.timer = {
-    id: setTimeout(callback, duration),
-    startTime: Date.now(),
-    duration: duration,
-    callback: callback
-  };
+  session.timer = { id: setTimeout(callback, duration), startTime: Date.now(), duration, callback };
 }
 function pauseTimer() {
   if (!session.timer.id) return;
@@ -246,7 +245,7 @@ function grade(card, kind){
     else if(p.state==='learning'){ if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); } else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); } }
     else { const next=Math.round(Math.max(1, p.intervalDays*p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); } p.reps++;
   } else { p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
-  p.lastGrade = kind; saveState(); showGradeFeedback(kind); updateChip();
+  p.lastGrade = kind; saveState(); showGradeFeedback(kind);
 }
 
 function autoAccentFromImage(img){
@@ -367,7 +366,7 @@ el.hits.addEventListener('touchmove',onTouchMove,{passive:true});
 el.hits.addEventListener('touchend',onTouchEnd,{passive:true});
 el.hits.addEventListener('touchcancel',onTouchEnd,{passive:true});
 el.artArea.addEventListener('contextmenu', (e) => e.preventDefault());
-el.mainLightboxImg.addEventListener('contextmenu', (e) => { if(isLongPressOpeningLightbox){e.preventDefault(); isLongPressOpeningLightbox = false;}});
+el.mainLightboxImg.addEventListener('contextmenu', (e) => { if(isLongPressOpeningLightbox){e.preventDefault(); setTimeout(() => { isLongPressOpeningLightbox = false; }, 100); }});
 el.mainLightbox.addEventListener('click', (e) => { if(e.target === el.mainLightbox){el.mainLightbox.classList.remove('show'); resumeTimer();}});
 el.stage.addEventListener('click', onStageClick);
 el.btnGood.addEventListener('click',()=>{if(!playlist.length)return;grade(playlist[session.index],'good');});
@@ -375,9 +374,10 @@ el.btnBad.addEventListener('click',()=>{if(!playlist.length)return;grade(playlis
 el.btnSettings.addEventListener('click',()=>{openSettings();});
 el.btnExport.addEventListener('click',exportData);
 el.btnImport.addEventListener('click',importData);
+window.addEventListener('dblclick', e => e.preventDefault());
 
 window.addEventListener('keydown',(e)=>{
-  if(el.settings.open) return;
+  if(el.settings.open || el.mainLightbox.classList.contains('show')) return;
   if(e.key==='ArrowRight'){revealNextStepOrCard();}
   else if(e.key==='ArrowLeft'){stepBackward();}
   else if(e.key.toLowerCase()==='g'){if(playlist.length)grade(playlist[session.index],'good');}
