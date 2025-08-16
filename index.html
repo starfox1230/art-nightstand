@@ -27,16 +27,13 @@
   }
   input, textarea, select { user-select:auto; -webkit-user-select:auto; }
 
-  /* Fullscreen stage (letterboxing allowed) */
   .stage{
     position:fixed; inset:0;
-    width:100vw; height:100vh;
-    height:100svh;
+    width:100vw; height:100vh; height:100svh;
     display:grid; place-items:center;
     z-index:0;
   }
 
-  /* 16:9 frame always fully in view — never clipped */
   .frame{
     position:relative;
     width: min(100vw, calc(100svh * (16/9)));
@@ -82,30 +79,28 @@
   .reveal:nth-child(1){ animation-delay:0ms } .reveal:nth-child(2){ animation-delay:80ms } .reveal:nth-child(3){ animation-delay:120ms }
   @keyframes fadeUp { to {opacity:1; transform: translateY(0)} }
 
-  /* === FULL IMAGE, NO CROP === */
+  /* FULL IMAGE, NO CROP */
   .art{
     grid-column:2;
     position:relative;
     width:100%; height:100%;
-    display:flex; align-items:center; justify-content:center; /* center the intrinsic box */
-    min-width:0; min-height:0; /* prevent grid overflow quirks */
+    display:flex; align-items:center; justify-content:center;
+    min-width:0; min-height:0;
   }
   .art img{
     display:block;
-    width:auto; height:auto;               /* keep intrinsic aspect ratio */
-    max-width:100%; max-height:100%;       /* scale down to fit the cell */
-    object-fit:contain; object-position:center center; /* belt + suspenders */
+    width:auto; height:auto;
+    max-width:100%; max-height:100%;
+    object-fit:contain; object-position:center center;
     filter: drop-shadow(0 20px 40px rgba(0,0,0,.35));
-    pointer-events:none;                   /* let overlay receive taps */
+    pointer-events:none;
   }
 
   .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
 
-  /* In-frame hit zones overlay (for clicks) */
   .hits{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; z-index:3; }
   .hit{ cursor:pointer; }
 
-  /* Footer UI */
   .footer{
     position:absolute; left:0; right:0; bottom:0;
     display:flex; justify-content:space-between; align-items:center; gap:.6rem;
@@ -140,6 +135,15 @@
   .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter: blur(3px); display:none; align-items:center; justify-content:center; z-index:9999; cursor:pointer; }
   .lightbox.show{ display:flex; }
   .lightbox img{ max-width:95vw; max-height:95vh; object-fit:contain; border-radius:12px; box-shadow: var(--shadow); cursor:default; user-select:auto; -webkit-user-select:auto; -webkit-touch-callout:default; }
+
+  /* NEW: checkbox UI on the left of the lightbox */
+  .lightboxTools{
+    position: absolute; left:2vw; top:50%; transform: translateY(-50%);
+    background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:12px;
+    padding:.6rem .8rem; display:flex; align-items:center; gap:.5rem; pointer-events:auto; cursor:default;
+  }
+  .lightboxTools label{ display:flex; align-items:center; gap:.5rem; font-size:.95rem; color:var(--fg); }
+  .lightboxTools input[type="checkbox"]{ width:20px; height:20px; }
 
   @media (orientation: landscape){ .clock{ font-size: clamp(2.6rem, 7vw, 5.2rem); } }
   @media (orientation: portrait){ .clock{ font-size: clamp(2.2rem, 10vw, 4.2rem); } }
@@ -196,9 +200,15 @@
         <div class="field"><label>Details (s)</label><input name="tDetails" type="number" min="1" value="4"></div>
       </div>
       <div class="field"><label>Auto accent</label><select name="autoAccent"><option value="on">On</option><option value="off">Off</option></select></div>
+
       <div class="row" style="justify-content:space-between"><strong>Today's repertoire</strong><span class="pill" id="selCount">0/0</span></div>
       <div class="field"><label>Search</label><input type="text" id="search" placeholder="Filter by artist or title"></div>
       <div class="list" id="deckList"></div>
+
+      <!-- NEW: Removed-from-pool manager -->
+      <div class="row" style="justify-content:space-between; margin-top: 1rem;"><strong>Removed from study pool</strong><span class="pill" id="removedCount">0</span></div>
+      <div class="list" id="removedList"></div>
+
       <div class="row" style="justify-content:space-between; margin-top: 1rem;"><strong>Manage Data</strong></div>
       <div class="actions">
         <button type="button" id="btnExport" class="btn">Download Progress</button>
@@ -212,12 +222,23 @@
     </form>
   </dialog>
 
-  <div class="lightbox" id="mainLightbox"><img id="mainLightboxImg" alt="Full artwork view"></div>
+  <!-- Lightbox now includes the left-side checkbox -->
+  <div class="lightbox" id="mainLightbox">
+    <div class="lightboxTools">
+      <label class="remove-toggle">
+        <input type="checkbox" id="removeToggle">
+        Remove image from study pool
+      </label>
+    </div>
+    <img id="mainLightboxImg" alt="Full artwork view">
+  </div>
 
 <script>
-const CONFIG_KEY = 'artSRS_config_v7';
-const STATE_KEY  = 'artSRS_state_v6';
-const TODAY_KEY  = 'artSRS_today_v3';
+const CONFIG_KEY   = 'artSRS_config_v7';
+const STATE_KEY    = 'artSRS_state_v6';
+const TODAY_KEY    = 'artSRS_today_v3';
+const EXCLUDED_KEY = 'artSRS_excluded_v1'; // NEW
+
 const DEFAULTS = {
   newCount: 5, maxReviews: 20, tImage:4, tArtist:3, tTitle:3, tDetails:4,
   imageBase:'./art/', autoAccent:'on', easeDefault:2.5
@@ -235,13 +256,16 @@ const el = {
   chip: document.getElementById('chip'),
   settings: document.getElementById('settings'), settingsForm: document.getElementById('settingsForm'),
   deckList: document.getElementById('deckList'), selCount: document.getElementById('selCount'), search: document.getElementById('search'),
+  removedList: document.getElementById('removedList'), removedCount: document.getElementById('removedCount'), // NEW
   artArea: document.getElementById('artArea'),
   mainLightbox: document.getElementById('mainLightbox'),
   mainLightboxImg: document.getElementById('mainLightboxImg'),
+  removeToggle: document.getElementById('removeToggle'), // NEW
   btnExport: document.getElementById('btnExport'), btnImport: document.getElementById('btnImport'), importFile: document.getElementById('importFile')
 };
 
 let cfg = loadConfig();
+let excluded = loadExcluded(); // NEW
 let deck = [];
 let progress = loadState();
 let playlist = [];
@@ -255,6 +279,8 @@ function loadState(){ const raw=localStorage.getItem(STATE_KEY); return raw?JSON
 function saveState(){ localStorage.setItem(STATE_KEY, JSON.stringify(progress)); }
 function loadToday(){ const raw=localStorage.getItem(TODAY_KEY); return raw?JSON.parse(raw):{date: dayISO(new Date()), ids: []}; }
 function saveToday(){ localStorage.setItem(TODAY_KEY, JSON.stringify(todaySel)); }
+function loadExcluded(){ const raw=localStorage.getItem(EXCLUDED_KEY); try{ return raw? new Set(JSON.parse(raw)) : new Set(); }catch{ return new Set(); } } // NEW
+function saveExcluded(){ localStorage.setItem(EXCLUDED_KEY, JSON.stringify([...excluded])); } // NEW
 
 function dayISO(d){ const z=new Date(d.getFullYear(), d.getMonth(), d.getDate()); return z.toISOString().slice(0,10); }
 function cleanText(val){ if(val==null) return ''; const tmp=document.createElement('div'); tmp.innerHTML=String(val); return (tmp.textContent||tmp.innerText||'').trim(); }
@@ -271,11 +297,8 @@ function pauseTimer() {
 }
 function resumeTimer() {
   if (!session.timer.id || session.timer.remaining == null) return;
-  if (session.timer.remaining > 0) {
-    startTimer(session.timer.callback, session.timer.remaining);
-  } else {
-    session.timer.callback();
-  }
+  if (session.timer.remaining > 0) { startTimer(session.timer.callback, session.timer.remaining); }
+  else { session.timer.callback(); }
   session.timer.remaining = null;
 }
 
@@ -286,7 +309,9 @@ function grade(card, kind){
     if(p.state==='new'){ p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
     else if(p.state==='learning'){ if(p.learningStep===1){ p.learningStep=2; p.intervalDays=3; p.dueISO=dayISO(new Date(Date.now()+3*86400000)); } else { p.state='review'; p.learningStep=0; p.intervalDays=Math.max(5, p.intervalDays||5); p.dueISO=dayISO(new Date(Date.now()+p.intervalDays*86400000)); } }
     else { const next=Math.round(Math.max(1, p.intervalDays*p.ease)); p.intervalDays=next; p.dueISO=dayISO(new Date(Date.now()+next*86400000)); } p.reps++;
-  } else { p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000)); }
+  } else {
+    p.lapses++; p.state='learning'; p.learningStep=1; p.intervalDays=1; p.dueISO=dayISO(new Date(Date.now()+86400000));
+  }
   p.lastGrade = kind; saveState(); showGradeFeedback(kind);
 }
 
@@ -304,12 +329,14 @@ function autoAccentFromImage(img){
 function fmtTime(d){ let h=d.getHours(); const m=d.getMinutes().toString().padStart(2,'0'); const ampm=h>=12?'PM':'AM'; h=h%12||12; return {h,m,ampm}; }
 function startClock(){ const tick=()=>{const d=new Date();const{h,m,ampm}=fmtTime(d);el.clock.textContent=`${h}:${m}`;el.ampm.textContent=ampm;}; tick(); setInterval(tick,15000); }
 
+/* Exclude removed cards from selection */
 function ensureToday(){
   const today=dayISO(new Date());
   if(todaySel.date!==today) todaySel={date:today,ids:[]};
   if(!todaySel.ids.length){
     const dueCards=[], freshCards=[];
     for(const c of deck){
+      if(excluded.has(c.id)) continue; // NEW: skip removed
       const p=ensureProgress(c);
       if(p.state==='new'){ freshCards.push(c.id); }
       else if(p.dueISO<=today){ dueCards.push(c.id); }
@@ -323,7 +350,15 @@ function ensureToday(){
   }
 }
 
-function buildPlaylist(){ ensureToday(); const map=new Map(deck.map(c=>[c.id,c])); playlist=todaySel.ids.map(id=>map.get(id)).filter(Boolean); session.index=0; updateChip(); }
+function buildPlaylist(){
+  ensureToday();
+  const map=new Map(deck.map(c=>[c.id,c]));
+  playlist=todaySel.ids.map(id=>map.get(id))
+    .filter(Boolean)
+    .filter(c=>!excluded.has(c.id)); // NEW: filter out removed
+  session.index=0;
+  updateChip();
+}
 function hideMeta(){ [el.artist,el.title,el.details].forEach(n=>{n.classList.remove('reveal');n.style.opacity=0;n.style.transform='translateY(8px)';}); }
 
 async function showCurrent(auto=true){
@@ -331,13 +366,8 @@ async function showCurrent(auto=true){
   resetGradeFeedback(); const p=progress[card.id]; if(p&&p.lastGrade) showGradeFeedback(p.lastGrade);
   hideMeta();
   await loadImageFor(card);
-  /* force full, uncropped view */
-  el.img.style.width = 'auto';
-  el.img.style.height = 'auto';
-  el.img.style.maxWidth = '100%';
-  el.img.style.maxHeight = '100%';
-  el.img.style.objectFit = 'contain';
-  el.img.style.objectPosition = 'center center';
+  el.img.style.width='auto'; el.img.style.height='auto'; el.img.style.maxWidth='100%'; el.img.style.maxHeight='100%';
+  el.img.style.objectFit='contain'; el.img.style.objectPosition='center center';
   if(cfg.autoAccent==='on') autoAccentFromImage(el.img);
   if(auto) runReveal(); updateChip();
 }
@@ -345,16 +375,13 @@ async function showCurrent(auto=true){
 function loadImageFor(card){
   return new Promise((resolve)=>{
     const src = card.image.startsWith('http') ? card.image : (cfg.imageBase||'./') + card.image;
-    el.img.onload = ()=> resolve();
-    el.img.onerror = ()=> resolve();
-    el.img.src = src;
+    el.img.onload=()=>resolve(); el.img.onerror=()=>resolve(); el.img.src=src;
   });
 }
 
 function revealStep(){
   const card=playlist[session.index]; if(!card) return;
-  const map=[null,el.artist,el.title,el.details];
-  const node=map[session.phase]; if(!node) return;
+  const map=[null,el.artist,el.title,el.details]; const node=map[session.phase]; if(!node) return;
   const contentMap={artist:card.artist,title:card.title,details:[card.date,card.style].filter(Boolean).join(' • ')};
   node.textContent=cleanText(contentMap[node.id]); node.classList.add('reveal'); node.removeAttribute('aria-hidden');
 }
@@ -363,11 +390,8 @@ function runRevealFromCurrentPhase(){
   const plan=[cfg.tImage,cfg.tArtist,cfg.tTitle,cfg.tDetails].map(Number);
   function scheduleNext(){
     if(session.phase>0) revealStep();
-    if(session.phase<3){
-      startTimer(()=>{ session.phase++; scheduleNext(); }, plan[session.phase]*1000);
-    } else {
-      startTimer(()=>{ nextCard(); }, plan[3]*1000);
-    }
+    if(session.phase<3){ startTimer(()=>{ session.phase++; scheduleNext(); }, plan[session.phase]*1000); }
+    else { startTimer(()=>{ nextCard(); }, plan[3]*1000); }
   }
   scheduleNext();
 }
@@ -408,7 +432,9 @@ function openSettings(){
   const f=el.settingsForm;
   f.newCount.value = cfg.newCount; f.maxReviews.value = cfg.maxReviews;
   f.imageBase.value=cfg.imageBase; f.tImage.value=cfg.tImage; f.tArtist.value=cfg.tArtist; f.tTitle.value=cfg.tTitle; f.tDetails.value=cfg.tDetails; f.autoAccent.value=cfg.autoAccent;
-  buildDeckListFresh(); el.settings.showModal();
+  buildDeckListFresh();
+  buildRemovedList(); // NEW
+  el.settings.showModal();
 }
 
 let tempSel=new Set();
@@ -423,10 +449,27 @@ function buildDeckListFresh(){
     const label=document.createElement('div');label.innerHTML=`<strong>${artist||'Unknown'}</strong><br><small>${title||''}</small>`;
     const preview=document.createElement('button');preview.className='btn';preview.textContent='Image';
     cb.addEventListener('change',()=>{ if(cb.checked){tempSel.add(c.id);}else{tempSel.delete(c.id);} selectedCount=tempSel.size; updateSelCount(); });
-    preview.addEventListener('click',(e)=>{e.preventDefault(); const src=c.image.startsWith('http')?c.image:(cfg.imageBase||'./')+c.image; el.mainLightboxImg.src=src; el.mainLightbox.classList.add('show');});
+    preview.addEventListener('click',(e)=>{e.preventDefault(); const src=c.image.startsWith('http')?c.image:(cfg.imageBase||'./')+c.image; el.mainLightboxImg.src=src; el.mainLightbox.classList.add('show'); el.removeToggle.checked=false; });
     row.appendChild(cb);row.appendChild(label);row.appendChild(preview); el.deckList.appendChild(row);
   }
   updateSelCount();
+}
+
+/* NEW: Removed list in Settings */
+function buildRemovedList(){
+  el.removedList.innerHTML='';
+  const items=[...excluded].map(id=>deck.find(c=>c.id===id)).filter(Boolean);
+  el.removedCount.textContent = items.length;
+  for(const c of items){
+    const row=document.createElement('div'); row.className='row';
+    const label=document.createElement('div'); label.innerHTML=`<strong>${cleanText(c.artist)||'Unknown'}</strong><br><small>${cleanText(c.title)||''}</small>`;
+    const preview=document.createElement('button'); preview.className='btn'; preview.textContent='Image';
+    preview.addEventListener('click',(e)=>{e.preventDefault(); const src=c.image.startsWith('http')?c.image:(cfg.imageBase||'./')+c.image; el.mainLightboxImg.src=src; el.mainLightbox.classList.add('show'); el.removeToggle.checked=false; });
+    const restore=document.createElement('button'); restore.className='btn good'; restore.textContent='Restore';
+    restore.addEventListener('click',()=>{ excluded.delete(c.id); saveExcluded(); buildRemovedList(); });
+    row.appendChild(label); row.appendChild(preview); row.appendChild(restore);
+    el.removedList.appendChild(row);
+  }
 }
 
 function exportData(){
@@ -456,18 +499,16 @@ el.importFile.addEventListener('change',(event)=>{
   reader.readAsText(file);
 });
 
-/* === NAVIGATION: clicks + touch taps === */
+/* NAV: clicks + touch taps */
 let lastTouchNavAt = 0;
-
 function onHitClick(e){
-  // Avoid double-fire if a touch just triggered nav
   if (Date.now() - lastTouchNavAt < 280) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const x = e.clientX - rect.left;
   if (x < rect.width/2){ stepBackward(); } else { revealNextStepOrCard(); }
 }
 
-/* Long-press to open lightbox + short-tap navigation on touch devices */
+/* Long-press & tap */
 let lpTimer=null, touchStartX=0, touchStartY=0, touchStartTime=0, lastTouchX=0, lastTouchY=0;
 const LONG_PRESS_MS=1000, MOVE_TOL=12;
 
@@ -477,7 +518,6 @@ function onTouchStart(e){
   touchStartY = lastTouchY = t.clientY;
   touchStartTime = Date.now();
 
-  // Long-press only if starting inside the image area
   const artRect = el.artArea.getBoundingClientRect();
   if (t.clientX>=artRect.left && t.clientX<=artRect.right && t.clientY>=artRect.top && t.clientY<=artRect.bottom){
     pauseTimer();
@@ -485,11 +525,12 @@ function onTouchStart(e){
       isLongPressOpeningLightbox = true;
       const card = playlist[session.index]; if(!card) return;
       const src = card.image.startsWith('http') ? card.image : (cfg.imageBase||'./') + card.image;
-      el.mainLightboxImg.src = src; el.mainLightbox.classList.add('show');
+      el.mainLightboxImg.src = src;
+      el.removeToggle.checked = false; // NEW: start unchecked
+      el.mainLightbox.classList.add('show');
     }, LONG_PRESS_MS);
   }
 }
-
 function onTouchMove(e){
   const t=e.touches[0];
   lastTouchX = t.clientX; lastTouchY = t.clientY;
@@ -498,28 +539,19 @@ function onTouchMove(e){
     clearTimeout(lpTimer); lpTimer=null; resumeTimer();
   }
 }
-
 function onTouchEnd(e){
   const duration = Date.now() - touchStartTime;
   const dx = Math.abs((lastTouchX||touchStartX) - touchStartX);
   const dy = Math.abs((lastTouchY||touchStartY) - touchStartY);
-
-  // Cancel pending long-press timer
   if (lpTimer){ clearTimeout(lpTimer); lpTimer=null; resumeTimer(); }
-
-  // If long-press opened lightbox, do nothing on release
   if (isLongPressOpeningLightbox){
-    // reset shortly so next taps work
     setTimeout(()=>{ isLongPressOpeningLightbox = false; }, 100);
     return;
   }
-
-  // Treat as a TAP if it was short and without movement
   if (duration < LONG_PRESS_MS && dx < MOVE_TOL && dy < MOVE_TOL){
     const rect = el.frame.getBoundingClientRect();
     const x = (e.changedTouches[0] ? e.changedTouches[0].clientX : touchStartX) - rect.left;
     lastTouchNavAt = Date.now();
-    // Prevent the subsequent synthetic click
     if (e.cancelable) e.preventDefault();
     if (x < rect.width/2){ stepBackward(); } else { revealNextStepOrCard(); }
   }
@@ -531,7 +563,7 @@ el.hits.addEventListener('touchmove',  onTouchMove,  {passive:false});
 el.hits.addEventListener('touchend',   onTouchEnd,   {passive:false});
 el.hits.addEventListener('touchcancel',onTouchEnd,   {passive:false});
 
-/* Let the black letterbox outside the frame also navigate */
+/* Letterbox navigation */
 function onStageClick(e){
   if(e.target !== el.stage) return;
   const x = e.clientX;
@@ -540,11 +572,18 @@ function onStageClick(e){
 el.stage.addEventListener('click', onStageClick);
 
 el.artArea.addEventListener('contextmenu', (e) => e.preventDefault());
+
+/* Lightbox close: apply removal if checked */
+el.mainLightbox.addEventListener('click', (e) => {
+  if(e.target === el.mainLightbox){
+    const doRemove = el.removeToggle && el.removeToggle.checked;
+    el.mainLightbox.classList.remove('show');
+    if (doRemove) excludeCurrentAndMaybeReplace(); // NEW
+    resumeTimer();
+  }
+});
 el.mainLightboxImg.addEventListener('contextmenu', (e) => {
   if(isLongPressOpeningLightbox){ e.preventDefault(); setTimeout(() => { isLongPressOpeningLightbox = false; }, 100); }
-});
-el.mainLightbox.addEventListener('click', (e) => {
-  if(e.target === el.mainLightbox){ el.mainLightbox.classList.remove('show'); resumeTimer(); }
 });
 
 el.btnGood.addEventListener('click',()=>{ if(!playlist.length) return; grade(playlist[session.index],'good'); });
@@ -555,7 +594,6 @@ el.btnExport.addEventListener('click',exportData);
 el.btnImport.addEventListener('click',importData);
 
 window.addEventListener('dblclick', e => e.preventDefault());
-
 window.addEventListener('keydown',(e)=>{
   if(el.settings.open || el.mainLightbox.classList.contains('show')) return;
   if(e.key==='ArrowRight'){ revealNextStepOrCard(); }
@@ -565,11 +603,47 @@ window.addEventListener('keydown',(e)=>{
   else if(e.key.toLowerCase()==='s'){ openSettings(); }
 });
 
+/* NEW: exclude + maybe replace logic */
+function excludeCurrentAndMaybeReplace(){
+  const card = playlist[session.index]; if(!card) return;
+  excluded.add(card.id); saveExcluded();
+
+  const idxInToday = todaySel.ids.indexOf(card.id);
+  if(idxInToday !== -1){ todaySel.ids.splice(idxInToday,1); saveToday(); }
+
+  const p = ensureProgress(card);
+  const wasNew = (p.state === 'new');
+
+  if (wasNew){
+    // find a replacement new card (not excluded and not already selected)
+    const candidates = deck.filter(c =>
+      !excluded.has(c.id) &&
+      !todaySel.ids.includes(c.id) &&
+      ensureProgress(c).state === 'new'
+    );
+    if (candidates.length){
+      const repl = candidates[Math.floor(Math.random()*candidates.length)];
+      if (idxInToday !== -1){ todaySel.ids.splice(idxInToday, 0, repl.id); }
+      else { todaySel.ids.push(repl.id); }
+      saveToday();
+    }
+  }
+
+  // Rebuild playlist but keep the user at the same index position
+  const targetIdx = Math.max(0, idxInToday !== -1 ? idxInToday : session.index);
+  const map=new Map(deck.map(c=>[c.id,c]));
+  const newPlaylist = todaySel.ids.map(id=>map.get(id)).filter(Boolean).filter(c=>!excluded.has(c.id));
+  playlist = newPlaylist;
+  session.index = Math.min(targetIdx, Math.max(0, playlist.length-1));
+  showCurrent(true);
+}
+
+/* Boot */
 async function init(){
   startClock();
   try{ const res=await fetch('deck.json'); deck=await res.json(); }catch(e){ deck=[]; }
   deck=deck.map(card=>({...card,id:String(card.id||card.title),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
-  if(!deck.length){ el.title.textContent='No deck.json found or empty.'; return; }
+  if(!deck.length){ el.title.textContent='No deck.json found or empty.';return;}
   ensureToday(); buildPlaylist(); showCurrent(true);
 }
 init();
