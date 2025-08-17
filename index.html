@@ -96,16 +96,16 @@
     grid-column:2;
     position:relative;
     width:100%; height:100%;
-    display:flex; align-items:center; justify-content:center; /* center the intrinsic box */
-    min-width:0; min-height:0; /* prevent grid overflow quirks */
+    display:flex; align-items:center; justify-content:center;
+    min-width:0; min-height:0;
   }
   .art img{
     display:block;
-    width:auto; height:auto;               /* keep intrinsic aspect ratio */
-    max-width:100%; max-height:100%;       /* scale down to fit the cell */
-    object-fit:contain; object-position:center center; /* belt + suspenders */
+    width:auto; height:auto;
+    max-width:100%; max-height:100%;
+    object-fit:contain; object-position:center center;
     filter: drop-shadow(0 20px 40px rgba(0,0,0,.35));
-    pointer-events:none;                   /* let overlay receive taps */
+    pointer-events:none;
   }
 
   .tint{ position:absolute; inset:-12%; background:radial-gradient(60% 50% at 50% 65%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%); filter: blur(60px); opacity:.6; pointer-events:none }
@@ -427,14 +427,12 @@ async function acquireWakeLock(reason = '') {
     wakeLock.addEventListener('release', () => {
       console.log('[wakeLock] released by system');
       wakeLock = null;
-      // If we’re in iOS standalone (historically buggy), keep the fallback on
       if (IS_IOS && IS_STANDALONE()) {
         enableNoSleep('wakelock-release');
       }
     });
   } catch (err) {
     console.warn('[wakeLock] request failed:', err?.name || err, err?.message || '');
-    // IMPORTANT: enable the fallback if wake lock can’t be acquired
     if (IS_IOS && IS_STANDALONE()) {
       await enableNoSleep('wakelock-request-failed');
     }
@@ -442,7 +440,6 @@ async function acquireWakeLock(reason = '') {
 }
 
 function setupStayAwake() {
-  // iOS requires a user gesture; also, PWA bug means we always light up fallback in standalone
   const firstGesture = async () => {
     if (IS_IOS && IS_STANDALONE()) {
       await enableNoSleep('ios-standalone-first-gesture');
@@ -457,7 +454,6 @@ function setupStayAwake() {
   window.addEventListener('click', firstGesture, true);
   window.addEventListener('touchend', firstGesture, true);
 
-  // Re-acquire on visibility and page lifecycle changes
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
       await acquireWakeLock('visibilitychange');
@@ -465,7 +461,6 @@ function setupStayAwake() {
         await enableNoSleep('visible-no-wakelock');
       }
     } else {
-      // When hidden, stop the fallback video
       disableNoSleep();
     }
   });
@@ -476,7 +471,6 @@ function setupStayAwake() {
     disableNoSleep();
   });
 
-  // Gentle nudge: some iOS builds occasionally pause the fallback; re-enable periodically
   setInterval(() => {
     if ((IS_IOS && IS_STANDALONE()) && noSleep && !noSleep.isEnabled) {
       enableNoSleep('periodic-nudge');
@@ -595,6 +589,39 @@ function openSettings(){
   el.settings.showModal();
 }
 
+/* >>> NEW: Save settings + apply immediately on dialog "save" <<< */
+function applySettingsFromForm() {
+  const f = el.settingsForm;
+  const prevNew = cfg.newCount|0, prevMax = cfg.maxReviews|0;
+
+  cfg.newCount   = Math.max(0, parseInt(f.newCount.value, 10)  || 0);
+  cfg.maxReviews = Math.max(0, parseInt(f.maxReviews.value,10) || 0);
+  cfg.imageBase  = (f.imageBase.value || '').trim() || './art/';
+  cfg.tImage     = Math.max(1, parseInt(f.tImage.value,10)     || 4);
+  cfg.tArtist    = Math.max(1, parseInt(f.tArtist.value,10)    || 3);
+  cfg.tTitle     = Math.max(1, parseInt(f.tTitle.value,10)     || 3);
+  cfg.tDetails   = Math.max(1, parseInt(f.tDetails.value,10)   || 4);
+  cfg.autoAccent = f.autoAccent.value === 'off' ? 'off' : 'on';
+
+  saveConfig();
+
+  if (cfg.newCount !== prevNew || cfg.maxReviews !== prevMax) {
+    todaySel.ids = [];
+    saveToday();
+    ensureToday();
+    buildPlaylist();
+  }
+
+  clearTimeout(session.timer.id);
+  runReveal();
+}
+el.settings.addEventListener('close', () => {
+  if (el.settings.returnValue === 'save') {
+    applySettingsFromForm();
+  }
+});
+/* >>> END NEW <<< */
+
 let tempSel=new Set();
 function buildDeckListFresh(){
   const term=(el.search.value||'').toLowerCase(); tempSel=new Set(todaySel.ids); el.deckList.innerHTML=''; let selectedCount=tempSel.size;
@@ -630,13 +657,22 @@ function buildRemovedList(){
   }
 }
 
+/* >>> NEW: Export everything (config + progress + today + excluded) <<< */
 function exportData(){
-  const dataToExport={config:loadConfig(),state:loadState()};
-  const jsonString=JSON.stringify(dataToExport,null,2);
-  const blob=new Blob([jsonString],{type:'application/json'}); const url=URL.createObjectURL(blob);
+  const dataToExport = {
+    config:   loadConfig(),
+    state:    loadState(),
+    today:    loadToday(),
+    excluded: [...loadExcluded()]
+  };
+  const jsonString = JSON.stringify(dataToExport, null, 2);
+  const blob = new Blob([jsonString],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url; a.download=`art_slideshow_progress_${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 }
+/* >>> END NEW <<< */
+
 function importData(){ el.importFile.click(); }
 el.importFile.addEventListener('change',(event)=>{
   const file=event.target.files[0]; if(!file) return;
@@ -644,13 +680,18 @@ el.importFile.addEventListener('change',(event)=>{
   reader.onload=(e)=>{
     try{
       const data=JSON.parse(e.target.result);
-      if(data&&data.config&&data.state){
-        localStorage.setItem(CONFIG_KEY,JSON.stringify(data.config));
-        localStorage.setItem(STATE_KEY,JSON.stringify(data.state));
-        localStorage.removeItem(TODAY_KEY);
-        alert('Progress imported successfully! The page will now reload.');
+      /* >>> NEW: import extras if present <<< */
+      if (data && data.config && data.state){
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(data.config));
+        localStorage.setItem(STATE_KEY,  JSON.stringify(data.state));
+        if (data.today)    localStorage.setItem(TODAY_KEY,    JSON.stringify(data.today));
+        if (data.excluded) localStorage.setItem(EXCLUDED_KEY, JSON.stringify(data.excluded));
+        alert('Import successful! The page will now reload.');
         location.reload();
-      }else{ alert('Invalid import file.'); }
+      } else {
+        alert('Invalid import file.');
+      }
+      /* >>> END NEW <<< */
     }catch(error){ alert('Error parsing file: '+error.message); }
     event.target.value='';
   };
@@ -812,7 +853,7 @@ async function init(){
   deck=deck.map(card=>({...card,id:String(card.id||card.title),artist:cleanText(card.artist),title:cleanText(card.title),date:cleanText(card.date),style:cleanText(card.style)}));
   if(!deck.length){ el.title.textContent='No deck.json found or empty.';return;}
   ensureToday(); buildPlaylist(); showCurrent(true);
-  setupStayAwake(); // [NEW] Activate screen lock prevention
+  setupStayAwake(); // Activate screen lock prevention
 }
 init();
 
